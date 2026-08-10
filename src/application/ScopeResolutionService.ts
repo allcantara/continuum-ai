@@ -1,4 +1,3 @@
-import { projectHashFromPath } from '../domain/scope/ProjectHash.js';
 import { projectScope, workspaceScope } from '../domain/scope/Scope.js';
 import { workspaceHashFromProjectHashes } from '../domain/scope/WorkspaceHash.js';
 import type { GitRemoteReader } from '../domain/ports/GitRemoteReader.js';
@@ -31,7 +30,7 @@ export class ScopeResolutionService {
   }
 
   async resolveFromPath(absolutePath: string): Promise<Result<Scope>> {
-    var hash = projectHashFromPath(absolutePath);
+    var hash = await this.gitRemoteReader.resolveProjectHash(absolutePath);
     return ok(projectScope(hash));
   }
 }

@@ -48,4 +48,21 @@ describe('ScopeResolutionService', () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it('resolveFromPath uses the git remote hash when available, not just the path', async () => {
+    var remoteHash = projectHashFromPath('/would-be-different-if-path-based');
+    var gitRemoteReader: GitRemoteReader = {
+      readRemoteUrl: vi.fn().mockResolvedValue('git@github.com:user/repo.git'),
+      resolveProjectHash: vi.fn().mockResolvedValue(remoteHash),
+    };
+
+    var service = new ScopeResolutionService(gitRemoteReader);
+    var result = await service.resolveFromPath('/some/local/checkout/of/repo');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.hash).toBe(remoteHash);
+    }
+    expect(gitRemoteReader.resolveProjectHash).toHaveBeenCalledWith('/some/local/checkout/of/repo');
+  });
 });
