@@ -13,8 +13,8 @@
   },
   "homepage": "https://github.com/allcantara/continuum-ai#readme",
   "bin": {
-    "continuum": "./dist/presentation/cli/cli.js",
-    "continuum-mcp": "./dist/presentation/mcp/server.js"
+    "continuum": "dist/presentation/cli/cli.js",
+    "continuum-mcp": "dist/presentation/mcp/server.js"
   },
   "files": [
     "dist"
