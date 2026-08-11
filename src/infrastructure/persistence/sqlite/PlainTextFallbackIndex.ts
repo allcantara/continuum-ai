@@ -33,6 +33,7 @@ export class PlainTextFallbackIndex implements SessionIndex {
         var content = this.contentMap.get(`${e.scopeHash}:${e.id}`) ?? '';
         return (
           e.summary.toLowerCase().includes(lowerQuery) ||
+          (e.scopeSlug ?? '').toLowerCase().includes(lowerQuery) ||
           content.toLowerCase().includes(lowerQuery) ||
           e.id.includes(lowerQuery)
         );
@@ -57,6 +58,7 @@ export class PlainTextFallbackIndex implements SessionIndex {
         {
           id: session.id,
           scopeHash: session.scope.hash,
+          scopeSlug: session.scope.slug,
           scopeType: session.scope.type,
           summary: session.summary,
           createdAt: session.createdAt,
@@ -65,5 +67,9 @@ export class PlainTextFallbackIndex implements SessionIndex {
         session.content,
       );
     }
+  }
+
+  async count(): Promise<number> {
+    return this.entries.length;
   }
 }

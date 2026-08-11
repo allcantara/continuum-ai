@@ -31,8 +31,13 @@ export class StashUseCase {
         status: 'active',
       });
       await this.sessionStore.moveScopeToTrash(input.scope);
-      for (var entry of indexedSessions) {
-        await this.sessionIndex.updateStatus(entry.id, input.scope.hash, 'trashed');
+      try {
+        for (var entry of indexedSessions) {
+          await this.sessionIndex.updateStatus(entry.id, input.scope.hash, 'trashed');
+        }
+      } catch (error) {
+        await this.compensateScopeStash(input.scope, indexedSessions);
+        throw error;
       }
     } else if (input.sessionId) {
       var existing = await this.sessionStore.findById(input.scope, input.sessionId);
@@ -40,7 +45,12 @@ export class StashUseCase {
         return err(`Session not found: ${input.sessionId}`);
       }
       await this.sessionStore.moveToTrash(input.scope, input.sessionId);
-      await this.sessionIndex.updateStatus(input.sessionId, input.scope.hash, 'trashed');
+      try {
+        await this.sessionIndex.updateStatus(input.sessionId, input.scope.hash, 'trashed');
+      } catch (error) {
+        await this.sessionStore.restoreFromTrash(input.scope, input.sessionId);
+        throw error;
+      }
     } else {
       return err('Either sessionId or stashProject must be provided');
     }
@@ -59,5 +69,21 @@ export class StashUseCase {
       output = { ...output, syncWarning };
     }
     return ok(output);
+  }
+
+  private async compensateScopeStash(
+    scope: Scope,
+    indexedSessions: readonly { readonly id: SessionId }[],
+  ): Promise<void> {
+    try {
+      var restoredIds = await this.sessionStore.restoreScopeFromTrash(scope);
+      for (var sessionId of restoredIds) {
+        await this.sessionIndex.updateStatus(sessionId, scope.hash, 'active');
+      }
+    } catch {
+      for (var entry of indexedSessions) {
+        await this.sessionIndex.updateStatus(entry.id, scope.hash, 'active');
+      }
+    }
   }
 }

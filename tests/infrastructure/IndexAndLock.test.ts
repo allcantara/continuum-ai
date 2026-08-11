@@ -32,6 +32,7 @@ describe('PlainTextFallbackIndex', () => {
       {
         id: session.id,
         scopeHash: scope.hash,
+        scopeSlug: scope.slug,
         scopeType: 'project',
         summary: session.summary,
         createdAt: session.createdAt,
@@ -50,6 +51,7 @@ describe('PlainTextFallbackIndex', () => {
       {
         id: sessionIdFrom('2026-08-10-1430'),
         scopeHash: scope.hash,
+        scopeSlug: scope.slug,
         scopeType: 'project',
         summary: sessionSummaryFrom('Active session'),
         createdAt: new Date(),
@@ -62,6 +64,7 @@ describe('PlainTextFallbackIndex', () => {
       {
         id: sessionIdFrom('2026-08-10-1500'),
         scopeHash: scope.hash,
+        scopeSlug: scope.slug,
         scopeType: 'project',
         summary: sessionSummaryFrom('Trashed session'),
         createdAt: new Date(),

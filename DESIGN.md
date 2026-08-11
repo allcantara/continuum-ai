@@ -51,12 +51,12 @@ Persistir e reaproveitar o contexto de trabalho entre:
 ```
 $CONTINUUM_HOME/                    (padrão: ~/.continuum/)
 ├── index.sqlite                    # índice derivado — NUNCA é fonte de verdade
-├── projects/<hash>/
-│   ├── meta.md                     # nome legível, caminho/remoto, data de criação
+├── projects/<slug>-<hash>/
+│   ├── meta.md                     # slug, hash, remoto/caminho de origem, data de criação
 │   └── sessions/
 │       ├── 2026-08-10-1430.md      # nunca sobrescrito; cresce a cada save
 │       └── 2026-08-11-0915.md
-├── workspaces/<hash>/
+├── workspaces/<slug>-<hash>/
 │   ├── meta.md                     # lista os hashes de projeto que compõem o workspace
 │   └── sessions/
 └── .trash/
@@ -64,10 +64,36 @@ $CONTINUUM_HOME/                    (padrão: ~/.continuum/)
     └── sessions/<hash>/<timestamp>-<timestamp-exclusao>.md
 ```
 
-### 4.2 Identidade (hash)
+`<slug>` é derivado do nome do repositório (último segmento do remoto git) ou do nome da pasta, e serve só para legibilidade — a identidade real do escopo continua sendo o `<hash>`. Pastas criadas antes dessa convenção (só `<hash>`, sem slug) continuam sendo usadas normalmente: o Continuum prefere uma pasta legada já existente em vez de criar uma segunda pasta duplicada para o mesmo projeto.
 
-- **Projeto**: hash do remoto git normalizado (ignora diferença `ssh://` vs `https://`, sufixo `.git`), com fallback para o caminho absoluto se não houver remoto.
-- **Workspace** (multi-root): hash pela **composição** dos hashes dos projetos que o formam, obtidos via a primitiva `roots` do protocolo MCP (o cliente expõe quais pastas estão abertas). Essa abordagem sobrevive a mover/renomear o arquivo `.code-workspace` e funciona mesmo em sessões "Untitled" ainda não salvas em disco.
+### 4.2 Identidade (hash + slug)
+
+- **Projeto**: hash do remoto git normalizado (ignora diferença `ssh://` vs `https://`, sufixo `.git`), com fallback para o caminho absoluto se não houver remoto. O slug legível vem da mesma fonte (nome do repositório ou nome da pasta).
+- **Workspace** (multi-root): hash pela **composição** dos hashes dos projetos que o formam, obtidos via a primitiva `roots` do protocolo MCP (o cliente expõe quais pastas estão abertas) — **quando o cliente realmente implementa essa primitiva** (ver 4.2.1).
+- **Sem projeto/workspace aberto**: bucket fixo e estável, `sem-projeto` (hash constante `unscoped`), usado só pelo MCP quando não há `roots` nem outro caminho confiável — evita hashear um diretório de trabalho arbitrário que mudaria de chat para chat.
+
+#### 4.2.1 Limitação conhecida: a primitiva `roots` do MCP não é confiável em todo cliente
+
+O Cursor anuncia suporte à capability `roots` na conexão inicial, mas a chamada real `roots/list` retorna erro (`Method not found`) — bug documentado no fórum da própria ferramenta, sem previsão de correção. Isso significa que a resolução automática de escopo via `roots` **nunca funciona no Cursor**.
+
+Isso não é universal — depende do cliente MCP:
+
+| Cliente | `roots/list` | `cwd` do processo do servidor | Sinal extra |
+|---|---|---|---|
+| Cursor | Quebrado (bug conhecido, sem ETA) | Não confiável — não amarrado ao workspace do chat | Nenhum |
+| Claude Code (macOS/Linux) | Funciona (retorna o diretório de lançamento + `--add-dir`) | Reportado igual ao diretório do projeto | `CLAUDE_PROJECT_DIR` (env var, documentado como estável) |
+| Claude Code (Windows) | Funciona | Bug conhecido: às vezes vem `C:\WINDOWS\system32` | `CLAUDE_PROJECT_DIR` também pode faltar em versões antigas |
+| VS Code (Copilot) | Documentado como suportado | Documentado como "padrão = pasta do workspace" | `${workspaceFolder}` (resolvido pelo cliente antes de subir o processo, não é env var) |
+| Cline / Continue | Não confirmado | Só correto se o próprio usuário configurar `cwd: "${workspaceFolder}"` no `mcp.json` | — |
+
+Por isso o design não pode assumir nem "roots sempre funciona" nem "cwd sempre é confiável" — a combinação varia por cliente e não há como o servidor MCP saber de antemão qual vai funcionar em cada conexão.
+
+Três consequências no design, para não depender de nenhum desses mecanismos isoladamente:
+
+1. **O agente de IA que chama a ferramenta deve informar `roots` explicitamente** (usando o caminho absoluto do workspace que ele já conhece) em vez de confiar apenas na primitiva. As descrições dos parâmetros das ferramentas MCP orientam isso. Quando o agente informa `roots`, esse valor tem prioridade sobre qualquer resultado da primitiva.
+2. **A primitiva `roots/list` ainda é tentada automaticamente** quando o agente não informa nada — funciona corretamente em clientes que a implementam de verdade (ex.: Claude Code), então continua sendo útil onde o Cursor falha.
+3. **O fallback para `process.cwd()` só é usado pela CLI**, nunca pelo servidor MCP. Na CLI, o diretório de trabalho do terminal é um sinal confiável (é o usuário quem o define, rodando o comando dentro do projeto). No servidor MCP, esse diretório varia por cliente (ver tabela acima) e não há como o Continuum diferenciar, em runtime, um cliente onde ele é confiável de um onde não é — por isso, sem `roots` (explícito ou via primitiva), uma chamada MCP cai no bucket `sem-projeto` em vez de arriscar adivinhar um caminho errado.
+4. **Cache de escopo por processo MCP**: quando uma chamada anterior na mesma sessão de chat já resolveu `roots` (explícito ou via primitiva), chamadas seguintes sem `roots` reutilizam o último escopo conhecido do processo — com aviso explícito. Isso reduz o impacto de o agente esquecer de informar `roots` na segunda chamada, sem substituir a necessidade de informá-lo na primeira.
 
 ### 4.3 Sessões são cumulativas, não incrementais
 
@@ -79,26 +105,26 @@ O "estado atual" de um projeto/workspace **não é um arquivo físico separado**
 
 - Usa o módulo nativo **`node:sqlite`** (embutido no Node.js, sem dependência externa compilada) com **FTS5** para busca full-text.
 - Requer Node.js recente (idealmente ≥24.15/25.7/26 para FTS5 garantido via release candidate). Ao iniciar, o servidor testa se FTS5 está disponível; se não estiver, cai automaticamente para busca simples por texto nos arquivos (sem quebrar funcionalidade, só perde o ranking mais esperto).
-- **Nunca é fonte de verdade** — é reconstruível a qualquer momento varrendo os arquivos `.md` existentes. Se `index.sqlite` não existir ou estiver corrompido, o servidor reconstrói automaticamente, sem necessidade de ferramenta manual de reindexação.
-- Guarda metadados enxutos por sessão: hash do projeto/workspace, timestamp, um resumo curto (1-2 linhas) extraído no momento do `save`, e um campo de **status** (`ativo` | `lixeira`) — usado tanto por `continuum_list` quanto por `continuum_trash`, sem precisar de dois caminhos de código diferentes.
+- **Nunca é fonte de verdade** — é reconstruível a qualquer momento varrendo os arquivos `.md` existentes. Se `index.sqlite` estiver vazio ou dessincronizado em relação aos arquivos em disco (ex.: após `git pull` trazer sessões de outra máquina), o `IndexReconciliationService` compara a contagem de arquivos com a contagem do índice e reconstrói automaticamente no boot, após `sync enable` e após cada `pull` bem-sucedido.
+- Guarda metadados enxutos por sessão: hash do projeto/workspace, **slug legível**, timestamp, um resumo curto (1-2 linhas) extraído no momento do `save`, e um campo de **status** (`ativo` | `lixeira`) — usado tanto por `continuum_list` quanto por `continuum_trash`, sem precisar de dois caminhos de código diferentes.
 
 ### 4.5 Padrão de leitura (mantém as respostas enxutas)
 
 - **`continuum_list` / `continuum_trash` / busca**: consultam **apenas o índice SQLite** — nunca abrem os arquivos `.md` inteiros. Respostas curtas mesmo com centenas de sessões.
-- **`continuum_load` / `continuum_recap`**: leem o(s) arquivo(s) `.md` completo(s) — porque essa é a função deles (devolver o contexto de trabalho para retomar).
+- **`continuum_load` / `continuum_recap`**: leem o(s) arquivo(s) `.md` completo(s) do disco, mas **aplicam truncamento na resposta** para caber no contexto do modelo (`CONTINUUM_MAX_LOAD_CHARS`, padrão 40000; `CONTINUUM_MAX_RECAP_CHARS`, padrão 60000). O arquivo em disco permanece intacto.
 
 ## 5. Ferramentas (8)
 
 | Ferramenta | Função | Observações |
 |---|---|---|
-| `continuum_save` | Salva o contexto da sessão atual | Grava o `.md` (escrita atômica: temp + rename) e depois insere/atualiza a linha correspondente no índice. Resumo deve ser cumulativo (ver 4.3). |
-| `continuum_load` | Carrega só a sessão mais recente | Lê o arquivo `.md` mais recente de `sessions/` do escopo atual (projeto ou workspace, resolvido automaticamente). |
-| `continuum_recap` | Carrega as últimas N sessões (histórico mais profundo) | Padrão: **5 sessões**, configurável via parâmetro. Nome provisório — pode ser revisitado. |
-| `continuum_list` | Lista/busca sessões | Consulta o índice SQLite (FTS5 quando disponível, fallback por texto simples). Pode buscar dentro de um projeto ou entre todos. |
-| `continuum_sync` | Liga/desliga/configura sincronização via git | Ver seção 6. |
-| `continuum_stash` | Move sessão específica ou projeto/workspace inteiro para a lixeira | Reversível: move o arquivo físico para `.trash/` e atualiza o status no índice para `lixeira` (não remove a linha). |
-| `continuum_trash` | Lista o que está na lixeira | Consulta o índice filtrando `status = lixeira` — mesmo padrão enxuto do `list`. |
-| `continuum_restore` | Restaura algo da lixeira, por hash/id | Move o arquivo de volta ao local original e atualiza o status para `ativo`. Fluxo esperado: primeiro `continuum_trash` para descobrir o id, depois `continuum_restore` com esse id. |
+| `continuum_save` | Salva o contexto da sessão atual | Grava o `.md` (escrita atômica: temp + rename) e depois insere/atualiza a linha correspondente no índice. Emite aviso heurístico se o conteúdo parecer conter segredo (token/chave/senha). |
+| `continuum_load` | Carrega só a sessão mais recente | Lê o arquivo `.md` mais recente de `sessions/` do escopo atual (projeto ou workspace, resolvido automaticamente). Trunca na resposta se necessário. |
+| `continuum_recap` | Carrega as últimas N sessões (histórico mais profundo) | Padrão: **5 sessões**, configurável via parâmetro. Orçamento total de caracteres dividido entre as N sessões. |
+| `continuum_list` | Lista/busca sessões | Consulta o índice SQLite (FTS5 quando disponível, fallback por texto simples). Exibe slug legível do projeto quando disponível. |
+| `continuum_sync` | Liga/desliga/configura sincronização via git | Ver seção 6. Valida formato do remote URL. Emite aviso sobre visibilidade do remoto ao habilitar. |
+| `continuum_stash` | Move sessão específica ou projeto/workspace inteiro para a lixeira | Reversível: move o arquivo físico para `.trash/` e atualiza o status no índice para `lixeira` (não remove a linha). Compensa movimentação física se a atualização do índice falhar. |
+| `continuum_trash` | Lista o que está na lixeira | Consulta o índice filtrando `status = lixeira` — inclui slug legível do projeto. |
+| `continuum_restore` | Restaura sessão ou projeto/workspace inteiro da lixeira | Move o arquivo de volta ao local original e atualiza o status para `ativo`. Aceita `session_id` ou `--project`. |
 
 ### 5.1 CLI equivalente
 
@@ -111,21 +137,24 @@ continuum sync enable <remote-url>
 continuum sync status
 continuum stash --session <id> | --project
 continuum trash
-continuum restore <id>
+continuum restore <id> | --project
 ```
 
 ## 6. Sincronização via git (opcional, configurável a qualquer momento)
 
 - A pasta `$CONTINUUM_HOME` é seu **próprio repositório git**, independente dos repositórios dos projetos monitorados.
 - `continuum_sync enable <remote-url>` liga a sincronização a qualquer momento (inicializa/clona conforme necessário).
-- `continuum_save`: grava local primeiro (nunca falha por rede), depois tenta `commit` + `push` (best-effort — se falhar, avisa mas não bloqueia o save local).
-- `continuum_load` / `continuum_list` / `continuum_trash`: fazem `pull` antes de ler, se sync estiver ligado.
+- `continuum_save`: grava local primeiro (nunca falha por rede), depois tenta `commit` + `push` (best-effort — se falhar, avisa mas não bloqueia o save local). Se o `push` falhar por divergência, tenta `pull --rebase` seguido de novo `push` antes de reportar erro.
+- `continuum_load` / `continuum_list` / `continuum_trash`: fazem `pull` antes de ler, se sync estiver ligado; após `pull` bem-sucedido, reconciliam o índice SQLite com os arquivos em disco.
 - `continuum_stash`: sincroniza a movimentação para a lixeira automaticamente (para não "ressuscitar" o dado em outra máquina que ainda não sabe da exclusão).
+- O `.gitignore` de `$CONTINUUM_HOME` (`index.sqlite`, `.lock`) é garantido sempre que o sync é habilitado, mesmo se o repositório git já existia.
+- `continuum_sync enable` emite aviso de que sessões podem conter dados sensíveis e que o usuário deve confirmar a visibilidade do remoto.
 - Usa as credenciais git já configuradas na máquina (SSH key / credential helper) — nada de credencial nova para gerenciar.
 
 ## 7. Lixeira
 
 - `continuum_stash` move para `.trash/`, nunca apaga de verdade.
+- `continuum_restore` suporta restauração de sessão individual (`session_id`) ou de projeto/workspace inteiro (`--project`), revertendo o `stash --project`.
 - **Sem expiração automática na v1** (removido do escopo — descartamos tanto o agendador do SO quanto a varredura preguiçosa de 30 dias por complexidade/preferência do usuário). Os itens ficam na lixeira indefinidamente até restauração ou remoção manual pelo próprio usuário no sistema de arquivos.
 - Possível melhoria futura (não na v1): expiração automática configurável.
 
@@ -133,6 +162,8 @@ continuum restore <id>
 
 1. **Escrita atômica**: grava em arquivo temporário e renomeia (operação atômica no sistema de arquivos) — protege contra corrupção mesmo com múltiplos processos `stdio` escrevendo ao mesmo tempo (cada cliente MCP pode spawnar seu próprio processo do servidor). Lock de arquivo simples para operações que tocam mais de um arquivo junto (ex.: sessão + índice).
 2. **Camada de resolução de escopo separada**: uma função única, chamada por todas as ferramentas antes de qualquer leitura/escrita, responsável por decidir projeto vs. workspace e calcular o hash correspondente. Centraliza a lógica e já deixa pronto o ponto de entrada para autenticação, quando/se existir modo remoto.
+3. **Respostas MCP com `isError`**: erros retornam `isError: true` no protocolo MCP (não apenas texto prefixado com `Error:`).
+4. **Avisos padronizados**: sync, segurança, truncamento, escopo genérico e cache de escopo usam prefixo `Aviso:` consistente, distinto de erros.
 
 ## 9. Fora do escopo da v1 (roadmap)
 

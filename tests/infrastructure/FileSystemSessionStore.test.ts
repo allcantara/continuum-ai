@@ -1,11 +1,14 @@
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createContainer, type Container } from '../../src/container.js';
-import { projectScope } from '../../src/domain/scope/Scope.js';
+import { isUnscoped, projectScope, scopeFolderName, unscopedProjectScope } from '../../src/domain/scope/Scope.js';
 import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
+import { createSession } from '../../src/domain/session/Session.js';
+import { sessionContentFrom } from '../../src/domain/session/SessionContent.js';
 import { sessionIdFrom } from '../../src/domain/session/SessionId.js';
+import { sessionSummaryFrom } from '../../src/domain/session/SessionSummary.js';
 
 describe('FileSystemSessionStore integration', () => {
   var home: string;
@@ -35,6 +38,32 @@ describe('FileSystemSessionStore integration', () => {
     if (loadResult.ok) {
       expect(loadResult.value.content).toContain('JWT validation');
     }
+  });
+
+  it('finds the chronologically latest session by id, not by file mtime (e.g. after a git checkout, mtimes no longer reflect save order)', async () => {
+    // The session with the *later* id is written to disk *first*, so its file mtime is the
+    // *oldest* — a store that (incorrectly) sorted by mtime would return the other one.
+    await container.sessionStore.save(
+      createSession({
+        id: sessionIdFrom('2026-01-01-1000'),
+        scope,
+        content: sessionContentFrom('Newest session by id, written to disk first.'),
+        summary: sessionSummaryFrom('Newest by id'),
+        createdAt: new Date('2026-01-01T10:00:00Z'),
+      }),
+    );
+    await container.sessionStore.save(
+      createSession({
+        id: sessionIdFrom('2026-01-01-0900'),
+        scope,
+        content: sessionContentFrom('Older session by id, written to disk last.'),
+        summary: sessionSummaryFrom('Older by id'),
+        createdAt: new Date('2026-01-01T09:00:00Z'),
+      }),
+    );
+
+    var latest = await container.sessionStore.findLatest(scope);
+    expect(latest?.summary).toBe('Newest by id');
   });
 
   it('creates session markdown file on disk', async () => {
@@ -109,5 +138,127 @@ describe('FileSystemSessionStore integration', () => {
 
     var loadResult = await container.loadSession.execute({ scope });
     expect(loadResult.ok).toBe(true);
+  });
+
+  it('names a fresh project folder using slug-hash when a slug is known', async () => {
+    var slugScope = projectScope(projectHashFromPath('/test/slugged-project'), 'slugged-project');
+
+    await container.saveSession.execute({ scope: slugScope, content: 'Session with a known slug.' });
+
+    var sessionsDir = join(home, 'projects', scopeFolderName(slugScope), 'sessions');
+    var files = await readdir(sessionsDir);
+    expect(files.some((f) => f.endsWith('.md'))).toBe(true);
+  });
+
+  it('keeps writing into a pre-existing bare-hash folder instead of creating a duplicate slug-hash one', async () => {
+    var slugScope = projectScope(projectHashFromPath('/test/legacy-project'), 'legacy-project');
+    var legacyDir = join(home, 'projects', slugScope.hash);
+    await mkdir(legacyDir, { recursive: true });
+
+    await container.saveSession.execute({ scope: slugScope, content: 'Session for a pre-existing legacy folder.' });
+
+    var legacySessions = await readdir(join(legacyDir, 'sessions'));
+    expect(legacySessions.some((f) => f.endsWith('.md'))).toBe(true);
+
+    var slugHashDirExists = await readdir(join(home, 'projects')).then(
+      (entries) => entries.includes(scopeFolderName(slugScope)),
+    );
+    expect(slugHashDirExists).toBe(false);
+  });
+
+  it('records slug and source provenance in meta.md for a fresh project', async () => {
+    var slugScope = projectScope(
+      projectHashFromPath('/test/documented-project'),
+      'documented-project',
+      '/test/documented-project',
+    );
+
+    await container.saveSession.execute({ scope: slugScope, content: 'Session with provenance.' });
+
+    var metaContent = await readFile(join(home, 'projects', scopeFolderName(slugScope), 'meta.md'), 'utf-8');
+    expect(metaContent).toContain('Slug: documented-project');
+    expect(metaContent).toContain('Source: /test/documented-project');
+  });
+
+  it('stashes and restores an entire project from trash', async () => {
+    await container.saveSession.execute({ scope, content: 'First session.' });
+    await container.saveSession.execute({ scope, content: 'Second session.' });
+
+    var stashResult = await container.stash.execute({ scope, stashProject: true });
+    expect(stashResult.ok).toBe(true);
+
+    var loadAfterStash = await container.loadSession.execute({ scope });
+    expect(loadAfterStash.ok).toBe(false);
+
+    var restoreResult = await container.restore.execute({ scope, restoreProject: true });
+    expect(restoreResult.ok).toBe(true);
+
+    var loadAfterRestore = await container.loadSession.execute({ scope });
+    expect(loadAfterRestore.ok).toBe(true);
+  });
+
+  it('preserves a custom summary through load and index reconciliation, not just the initial save', async () => {
+    var saveResult = await container.saveSession.execute({
+      scope,
+      content: 'The first content line does not describe this session at all.',
+      summary: 'Custom summary explicitly provided by the caller',
+    });
+    expect(saveResult.ok).toBe(true);
+
+    var loadResult = await container.loadSession.execute({ scope });
+    expect(loadResult.ok).toBe(true);
+    if (loadResult.ok) {
+      expect(loadResult.value.summary).toBe('Custom summary explicitly provided by the caller');
+    }
+
+    // Simulate the index being rebuilt from disk (boot reconciliation, post-sync-pull, etc.).
+    await container.indexReconciliation.reconcileIfNeeded();
+    await container.sessionIndex.rebuildFromSessions(await container.sessionStore.listAllSessions());
+
+    var listResult = await container.listSessions.execute({ scope });
+    expect(listResult.ok).toBe(true);
+    if (listResult.ok) {
+      expect(listResult.value.sessions[0]!.summary).toBe('Custom summary explicitly provided by the caller');
+    }
+  });
+
+  it('excludes meta.md from countAllSessions so reconciliation does not trigger on every boot', async () => {
+    await container.saveSession.execute({ scope, content: 'First session.' });
+    await container.saveSession.execute({ scope, content: 'Second session.' });
+
+    var count = await container.sessionStore.countAllSessions();
+    expect(count).toBe(2);
+  });
+
+  it('keeps every session file when many saves race concurrently in the same scope and minute', async () => {
+    // Concurrent MCP tool calls (or a CLI save racing an MCP save) can land in the same
+    // scope within the same minute. Picking a free id and writing it must be atomic —
+    // otherwise two saves can pick the same id and one silently overwrites the other's file.
+    var results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        container.saveSession.execute({ scope, content: `Concurrent session ${i}.` }),
+      ),
+    );
+
+    expect(results.every((r) => r.ok)).toBe(true);
+    var ids = results.map((r) => (r.ok ? r.value.sessionId : ''));
+    expect(new Set(ids).size).toBe(10);
+
+    var listResult = await container.listSessions.execute({ scope });
+    expect(listResult.ok).toBe(true);
+    if (listResult.ok) {
+      expect(listResult.value.sessions.length).toBe(10);
+    }
+  });
+
+  it('saves, finds and re-derives the stable "sem-projeto" bucket from disk when rebuilding the index', async () => {
+    var noScope = unscopedProjectScope();
+
+    await container.saveSession.execute({ scope: noScope, content: 'Session saved without a workspace open.' });
+
+    var allSessions = await container.sessionStore.listAllSessions();
+    var unscopedSessions = allSessions.filter((s) => isUnscoped(s.scope));
+    expect(unscopedSessions).toHaveLength(1);
+    expect(unscopedSessions[0]!.scope.hash).toBe(noScope.hash);
   });
 });

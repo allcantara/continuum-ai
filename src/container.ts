@@ -1,4 +1,5 @@
 import { mkdir } from 'node:fs/promises';
+import { IndexReconciliationService } from './application/IndexReconciliationService.js';
 import { LoadSessionUseCase } from './application/load/LoadSessionUseCase.js';
 import { ListSessionsUseCase } from './application/list/ListSessionsUseCase.js';
 import { RecapUseCase } from './application/recap/RecapUseCase.js';
@@ -22,6 +23,7 @@ export type Container = {
   readonly home: string;
   readonly sessionStore: SessionStore;
   readonly sessionIndex: SessionIndex;
+  readonly indexReconciliation: IndexReconciliationService;
   readonly scopeResolution: ScopeResolutionService;
   readonly saveSession: SaveSessionUseCase;
   readonly loadSession: LoadSessionUseCase;
@@ -40,6 +42,9 @@ export async function createContainer(home?: string): Promise<Container> {
 
   var sessionStore = new FileSystemSessionStore(resolvedHome);
   var sessionIndex = await createSessionIndex(resolvedHome, sessionStore);
+  var indexReconciliation = new IndexReconciliationService(sessionStore, sessionIndex);
+  await indexReconciliation.reconcileIfNeeded();
+
   var gitRemoteReader = new GitRemoteReader();
   var gitSync = new GitSyncAdapter(resolvedHome);
   var scopeResolution = new ScopeResolutionService(gitRemoteReader);
@@ -48,15 +53,16 @@ export async function createContainer(home?: string): Promise<Container> {
     home: resolvedHome,
     sessionStore,
     sessionIndex,
+    indexReconciliation,
     scopeResolution,
     saveSession: new SaveSessionUseCase(sessionStore, sessionIndex, gitSync),
-    loadSession: new LoadSessionUseCase(sessionStore, gitSync),
-    recap: new RecapUseCase(sessionStore, gitSync),
-    listSessions: new ListSessionsUseCase(sessionIndex, gitSync),
-    enableSync: new EnableSyncUseCase(gitSync),
+    loadSession: new LoadSessionUseCase(sessionStore, gitSync, indexReconciliation),
+    recap: new RecapUseCase(sessionStore, gitSync, indexReconciliation),
+    listSessions: new ListSessionsUseCase(sessionIndex, gitSync, indexReconciliation),
+    enableSync: new EnableSyncUseCase(gitSync, indexReconciliation),
     syncStatus: new SyncStatusUseCase(gitSync),
     stash: new StashUseCase(sessionStore, sessionIndex, gitSync),
-    listTrash: new ListTrashUseCase(sessionIndex, gitSync),
+    listTrash: new ListTrashUseCase(sessionIndex, gitSync, indexReconciliation),
     restore: new RestoreUseCase(sessionStore, sessionIndex, gitSync),
   };
 }

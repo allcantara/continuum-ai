@@ -15,11 +15,16 @@ import {
   listSchema,
   loadSchema,
   recapSchema,
-  restoreSchema,
+  restoreInputSchema,
   saveSchema,
   stashSchema,
-  syncSchema,
+  syncInputSchema,
+  type ScopeResolutionOptions,
 } from './tools/handlers.js';
+import { isErrorResponse } from './tools/ResponseFormatting.js';
+import { ScopeRootCache } from './ScopeRootCache.js';
+
+const scopeRootCache = new ScopeRootCache();
 
 /**
  * Queries the MCP `roots` primitive so the client's open workspace folders drive
@@ -50,15 +55,47 @@ function fileUriToPath(uri: string): string | null {
   }
 }
 
+export type ResolvedToolArgs<T> = T & {
+  readonly _scopeFromCache?: boolean;
+};
+
+/**
+ * An explicit `roots` argument (supplied by the calling agent) always wins over the
+ * MCP `roots` primitive: the primitive is unreliable in practice (e.g. Cursor
+ * advertises support for it but its `roots/list` call fails), while an agent that
+ * already knows the open workspace path is a much stronger signal.
+ */
 async function withResolvedRoots<T extends { roots?: string[] | undefined }>(
   server: McpServer,
   args: T,
-): Promise<T> {
-  var clientRoots = await resolveClientRoots(server);
-  if (clientRoots === undefined) {
+): Promise<ResolvedToolArgs<T>> {
+  var explicitRoots = args.roots && args.roots.length > 0 ? args.roots : undefined;
+  var clientRoots = explicitRoots ? undefined : await resolveClientRoots(server);
+  var resolution = scopeRootCache.resolve(explicitRoots, clientRoots);
+
+  if (resolution.roots === undefined) {
     return args;
   }
-  return { ...args, roots: clientRoots };
+
+  if (resolution.fromProcessCache) {
+    return { ...args, roots: resolution.roots, _scopeFromCache: true };
+  }
+
+  return { ...args, roots: resolution.roots };
+}
+
+function scopeOptionsFromArgs<T extends ResolvedToolArgs<{ roots?: string[] | undefined }>>(
+  args: T,
+): ScopeResolutionOptions | undefined {
+  return args._scopeFromCache ? { fromProcessCache: true } : undefined;
+}
+
+async function mcpTextResult(textPromise: Promise<string>) {
+  var text = await textPromise;
+  return {
+    content: [{ type: 'text' as const, text }],
+    isError: isErrorResponse(text),
+  };
 }
 
 async function main(): Promise<void> {
@@ -75,9 +112,10 @@ async function main(): Promise<void> {
       description: 'Save a cumulative session snapshot of the current work context',
       inputSchema: saveSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleSave(container, await withResolvedRoots(server, args)) }],
-    }),
+    async (args) => {
+      var resolvedArgs = await withResolvedRoots(server, args);
+      return mcpTextResult(handleSave(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
+    },
   );
 
   server.registerTool(
@@ -86,9 +124,10 @@ async function main(): Promise<void> {
       description: 'Load the most recent session for the current project or workspace',
       inputSchema: loadSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleLoad(container, await withResolvedRoots(server, args)) }],
-    }),
+    async (args) => {
+      var resolvedArgs = await withResolvedRoots(server, args);
+      return mcpTextResult(handleLoad(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
+    },
   );
 
   server.registerTool(
@@ -97,9 +136,10 @@ async function main(): Promise<void> {
       description: 'Load the last N sessions for deeper history (default: 5)',
       inputSchema: recapSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleRecap(container, await withResolvedRoots(server, args)) }],
-    }),
+    async (args) => {
+      var resolvedArgs = await withResolvedRoots(server, args);
+      return mcpTextResult(handleRecap(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
+    },
   );
 
   server.registerTool(
@@ -108,20 +148,19 @@ async function main(): Promise<void> {
       description: 'Search and list sessions via the index',
       inputSchema: listSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleList(container, await withResolvedRoots(server, args)) }],
-    }),
+    async (args) => {
+      var resolvedArgs = await withResolvedRoots(server, args);
+      return mcpTextResult(handleList(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
+    },
   );
 
   server.registerTool(
     'continuum_sync',
     {
       description: 'Enable or check git sync configuration',
-      inputSchema: syncSchema.shape,
+      inputSchema: syncInputSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleSync(container, args) }],
-    }),
+    async (args) => mcpTextResult(handleSync(container, args)),
   );
 
   server.registerTool(
@@ -130,28 +169,28 @@ async function main(): Promise<void> {
       description: 'Move a session or entire project/workspace to trash',
       inputSchema: stashSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleStash(container, await withResolvedRoots(server, args)) }],
-    }),
+    async (args) => {
+      var resolvedArgs = await withResolvedRoots(server, args);
+      return mcpTextResult(handleStash(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
+    },
   );
 
   server.registerTool(
     'continuum_trash',
     { description: 'List items in trash' },
-    async () => ({
-      content: [{ type: 'text' as const, text: await handleTrash(container) }],
-    }),
+    async () => mcpTextResult(handleTrash(container)),
   );
 
   server.registerTool(
     'continuum_restore',
     {
-      description: 'Restore a session from trash',
-      inputSchema: restoreSchema.shape,
+      description: 'Restore a session or entire project/workspace from trash',
+      inputSchema: restoreInputSchema.shape,
     },
-    async (args) => ({
-      content: [{ type: 'text' as const, text: await handleRestore(container, await withResolvedRoots(server, args)) }],
-    }),
+    async (args) => {
+      var resolvedArgs = await withResolvedRoots(server, args);
+      return mcpTextResult(handleRestore(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
+    },
   );
 
   var transport = new StdioServerTransport();

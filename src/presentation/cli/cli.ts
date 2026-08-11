@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     .option('-m, --message <summary>', 'Short summary')
     .action(async (options: { message?: string }) => {
       var content = openEditor();
-      var text = await handleSave(container, { content, summary: options.message });
+      var text = await handleSave(container, { content, summary: options.message }, 'cli');
       console.log(text);
     });
 
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
     .command('load')
     .description('Load the most recent session')
     .action(async () => {
-      var text = await handleLoad(container, {});
+      var text = await handleLoad(container, {}, 'cli');
       console.log(text);
     });
 
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
     .description('Load last N sessions')
     .option('--last <n>', 'Number of sessions', '5')
     .action(async (options: { last: string }) => {
-      var text = await handleRecap(container, { last: Number(options.last) });
+      var text = await handleRecap(container, { last: Number(options.last) }, 'cli');
       console.log(text);
     });
 
@@ -65,10 +65,11 @@ async function main(): Promise<void> {
     .option('-q, --query <search>', 'Search query')
     .option('--all-projects', 'Search across all projects')
     .action(async (options: { query?: string; allProjects?: boolean }) => {
-      var text = await handleList(container, {
-        query: options.query,
-        all_projects: options.allProjects,
-      });
+      var text = await handleList(
+        container,
+        { query: options.query, all_projects: options.allProjects },
+        'cli',
+      );
       console.log(text);
     });
 
@@ -97,10 +98,11 @@ async function main(): Promise<void> {
     .option('--session <id>', 'Session ID to stash')
     .option('--project', 'Stash entire project/workspace')
     .action(async (options: { session?: string; project?: boolean }) => {
-      var text = await handleStash(container, {
-        session_id: options.session,
-        project: options.project,
-      });
+      var text = await handleStash(
+        container,
+        { session_id: options.session, project: options.project },
+        'cli',
+      );
       console.log(text);
     });
 
@@ -114,10 +116,15 @@ async function main(): Promise<void> {
 
   program
     .command('restore')
-    .description('Restore session from trash')
-    .argument('<id>', 'Session ID to restore')
-    .action(async (id: string) => {
-      var text = await handleRestore(container, { session_id: id });
+    .description('Restore session or project from trash')
+    .argument('[id]', 'Session ID to restore')
+    .option('--project', 'Restore entire project/workspace')
+    .action(async (id: string | undefined, options: { project?: boolean }) => {
+      var text = await handleRestore(
+        container,
+        { session_id: id, project: options.project },
+        'cli',
+      );
       console.log(text);
     });
 

@@ -27,12 +27,12 @@ export function syncConfigPath(home: string): string {
   return join(home, 'sync.json');
 }
 
-export function scopeSessionsDir(home: string, scopeType: 'project' | 'workspace', scopeHash: string): string {
+export function scopeSessionsDir(home: string, scopeType: 'project' | 'workspace', scopeDirName: string): string {
   var base = scopeType === 'project' ? projectsDir(home) : workspacesDir(home);
-  return join(base, scopeHash, 'sessions');
+  return join(base, scopeDirName, 'sessions');
 }
 
-export function scopeMetaPath(home: string, scopeType: 'project' | 'workspace', scopeHash: string): string {
+export function scopeMetaPath(home: string, scopeType: 'project' | 'workspace', scopeDirName: string): string {
   var base = scopeType === 'project' ? projectsDir(home) : workspacesDir(home);
-  return join(base, scopeHash, 'meta.md');
+  return join(base, scopeDirName, 'meta.md');
 }

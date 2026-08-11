@@ -1,7 +1,9 @@
 import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SyncConfiguration } from '../../domain/sync/SyncConfiguration.js';
+import { SYNC_ENABLE_WARNING } from '../../domain/session/SecretScanner.js';
 import type { Result } from '../Result.js';
 import { ok } from '../Result.js';
+import type { IndexReconciliationService } from '../IndexReconciliationService.js';
 
 export type EnableSyncInput = {
   readonly remoteUrl: string;
@@ -13,15 +15,19 @@ export type EnableSyncOutput = {
 };
 
 export class EnableSyncUseCase {
-  constructor(private readonly gitSync: GitSyncPort) {}
+  constructor(
+    private readonly gitSync: GitSyncPort,
+    private readonly indexReconciliation: IndexReconciliationService,
+  ) {}
 
   async execute(input: EnableSyncInput): Promise<Result<EnableSyncOutput>> {
     var result = await this.gitSync.enable(input.remoteUrl);
+    await this.indexReconciliation.reconcileIfNeeded();
     var configuration = await this.gitSync.getConfiguration();
 
     return ok({
       configuration,
-      message: result.message,
+      message: `${result.message}\n${SYNC_ENABLE_WARNING}`,
     });
   }
 }

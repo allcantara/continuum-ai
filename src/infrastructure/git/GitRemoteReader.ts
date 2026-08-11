@@ -1,8 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitRemoteReader as GitRemoteReaderPort } from '../../domain/ports/GitRemoteReader.js';
-import { projectHashFromPath, projectHashFromRemote } from '../../domain/scope/ProjectHash.js';
-import type { ProjectHash } from '../../domain/scope/ProjectHash.js';
+import type { GitRemoteReader as GitRemoteReaderPort, ProjectIdentity } from '../../domain/ports/GitRemoteReader.js';
+import {
+  normalizeGitRemote,
+  projectHashFromPath,
+  projectHashFromRemote,
+  projectSlugFromPath,
+  projectSlugFromRemote,
+} from '../../domain/scope/ProjectHash.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,11 +23,19 @@ export class GitRemoteReader implements GitRemoteReaderPort {
     }
   }
 
-  async resolveProjectHash(absolutePath: string): Promise<ProjectHash> {
+  async resolveProjectIdentity(absolutePath: string): Promise<ProjectIdentity> {
     var remote = await this.readRemoteUrl(absolutePath);
     if (remote) {
-      return projectHashFromRemote(remote);
+      return {
+        hash: projectHashFromRemote(remote),
+        slug: projectSlugFromRemote(remote),
+        sourceHint: normalizeGitRemote(remote),
+      };
     }
-    return projectHashFromPath(absolutePath);
+    return {
+      hash: projectHashFromPath(absolutePath),
+      slug: projectSlugFromPath(absolutePath),
+      sourceHint: absolutePath,
+    };
   }
 }

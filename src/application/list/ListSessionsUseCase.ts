@@ -3,6 +3,7 @@ import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
 import type { Result } from '../Result.js';
 import { ok } from '../Result.js';
+import type { IndexReconciliationService } from '../IndexReconciliationService.js';
 
 export type ListSessionsInput = {
   readonly scope?: Scope;
@@ -13,6 +14,7 @@ export type ListSessionsInput = {
 export type ListSessionEntry = {
   readonly sessionId: string;
   readonly scopeHash: string;
+  readonly scopeSlug: string;
   readonly scopeType: 'project' | 'workspace';
   readonly summary: string;
   readonly createdAt: string;
@@ -26,13 +28,11 @@ export class ListSessionsUseCase {
   constructor(
     private readonly sessionIndex: SessionIndex,
     private readonly gitSync: GitSyncPort,
+    private readonly indexReconciliation: IndexReconciliationService,
   ) {}
 
   async execute(input: ListSessionsInput): Promise<Result<ListSessionsOutput>> {
-    var config = await this.gitSync.getConfiguration();
-    if (config.enabled) {
-      await this.gitSync.pull();
-    }
+    await this.pullAndReconcileIfSynced();
 
     var searchQuery: {
       query?: string;
@@ -57,10 +57,23 @@ export class ListSessionsUseCase {
       sessions: entries.map((entry) => ({
         sessionId: entry.id,
         scopeHash: entry.scopeHash,
+        scopeSlug: entry.scopeSlug,
         scopeType: entry.scopeType,
         summary: entry.summary,
         createdAt: entry.createdAt.toISOString(),
       })),
     });
+  }
+
+  private async pullAndReconcileIfSynced(): Promise<void> {
+    var config = await this.gitSync.getConfiguration();
+    if (!config.enabled) {
+      return;
+    }
+
+    var pullResult = await this.gitSync.pull();
+    if (pullResult.success) {
+      await this.indexReconciliation.reconcileIfNeeded();
+    }
   }
 }

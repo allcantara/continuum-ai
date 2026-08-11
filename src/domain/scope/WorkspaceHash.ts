@@ -13,3 +13,10 @@ export function workspaceHashFromProjectHashes(projectHashes: readonly ProjectHa
   var hash = createHash('sha256').update(composite).digest('hex').slice(0, 16);
   return hash as WorkspaceHash;
 }
+
+const MAX_WORKSPACE_SLUG_LENGTH = 40;
+
+export function workspaceSlugFromProjectSlugs(slugs: readonly string[]): string {
+  var joined = [...slugs].sort().join('+');
+  return joined.length > 0 && joined.length <= MAX_WORKSPACE_SLUG_LENGTH ? joined : 'workspace';
+}

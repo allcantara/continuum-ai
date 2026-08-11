@@ -29,7 +29,14 @@ export class SqliteSessionIndex implements SessionIndex {
     try {
       var sqlite = await import('node:sqlite');
       this.db = new sqlite.DatabaseSync(indexPath(this.home)) as unknown as SqliteDatabase;
+      // Multiple processes (CLI invocations, MCP server instances) can open this file at
+      // the same time. Without a busy timeout, a concurrent writer makes SQLite throw
+      // "database is locked" immediately instead of waiting — busy_timeout must be the
+      // very first statement, before schema creation, so that race is covered too.
+      this.db.exec('PRAGMA busy_timeout = 5000');
+      this.db.exec('PRAGMA journal_mode = WAL');
       this.createSchema();
+      this.ensureScopeSlugColumn();
       this.ftsAvailable = this.checkFts5();
     } catch {
       this.db = null;
@@ -39,9 +46,17 @@ export class SqliteSessionIndex implements SessionIndex {
   async upsert(entry: SessionIndexEntry, content: SessionContent): Promise<void> {
     var db = this.requireDb();
     db.prepare(`
-      INSERT OR REPLACE INTO sessions (id, scope_hash, scope_type, summary, created_at, status)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(entry.id, entry.scopeHash, entry.scopeType, entry.summary, entry.createdAt.toISOString(), entry.status);
+      INSERT OR REPLACE INTO sessions (id, scope_hash, scope_slug, scope_type, summary, created_at, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      entry.id,
+      entry.scopeHash,
+      entry.scopeSlug,
+      entry.scopeType,
+      entry.summary,
+      entry.createdAt.toISOString(),
+      entry.status,
+    );
 
     if (this.ftsAvailable) {
       db.prepare(`INSERT OR REPLACE INTO sessions_fts (id, scope_hash, content, summary) VALUES (?, ?, ?, ?)`)
@@ -76,6 +91,7 @@ export class SqliteSessionIndex implements SessionIndex {
         {
           id: session.id,
           scopeHash: session.scope.hash,
+          scopeSlug: session.scope.slug,
           scopeType: session.scope.type,
           summary: session.summary,
           createdAt: session.createdAt,
@@ -84,6 +100,12 @@ export class SqliteSessionIndex implements SessionIndex {
         session.content,
       );
     }
+  }
+
+  async count(): Promise<number> {
+    var db = this.requireDb();
+    var row = db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number };
+    return row.count;
   }
 
   close(): void {
@@ -104,6 +126,7 @@ export class SqliteSessionIndex implements SessionIndex {
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT NOT NULL,
         scope_hash TEXT NOT NULL,
+        scope_slug TEXT NOT NULL DEFAULT '',
         scope_type TEXT NOT NULL,
         summary TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -126,6 +149,15 @@ export class SqliteSessionIndex implements SessionIndex {
     }
   }
 
+  private ensureScopeSlugColumn(): void {
+    var db = this.requireDb();
+    var columns = db.prepare(`PRAGMA table_info(sessions)`).all() as Array<{ name: string }>;
+    var hasScopeSlug = columns.some((column) => column.name === 'scope_slug');
+    if (!hasScopeSlug) {
+      db.exec(`ALTER TABLE sessions ADD COLUMN scope_slug TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
   private checkFts5(): boolean {
     try {
       var db = this.requireDb();
@@ -141,7 +173,7 @@ export class SqliteSessionIndex implements SessionIndex {
   private searchFts(db: SqliteDatabase, query: SessionSearchQuery): readonly SessionIndexEntry[] {
     var status = query.status ?? 'active';
     var sql = `
-      SELECT s.id, s.scope_hash, s.scope_type, s.summary, s.created_at, s.status
+      SELECT s.id, s.scope_hash, s.scope_slug, s.scope_type, s.summary, s.created_at, s.status
       FROM sessions s
       JOIN sessions_fts fts ON s.id = fts.id AND s.scope_hash = fts.scope_hash
       WHERE sessions_fts MATCH ? AND s.status = ?
@@ -161,7 +193,7 @@ export class SqliteSessionIndex implements SessionIndex {
 
   private searchSimple(db: SqliteDatabase, query: SessionSearchQuery): readonly SessionIndexEntry[] {
     var status = query.status ?? 'active';
-    var sql = 'SELECT id, scope_hash, scope_type, summary, created_at, status FROM sessions WHERE status = ?';
+    var sql = 'SELECT id, scope_hash, scope_slug, scope_type, summary, created_at, status FROM sessions WHERE status = ?';
     var params: unknown[] = [status];
 
     if (query.scopeHash) {
@@ -170,9 +202,9 @@ export class SqliteSessionIndex implements SessionIndex {
     }
 
     if (query.query) {
-      sql += ' AND (summary LIKE ? OR id LIKE ?)';
+      sql += ' AND (summary LIKE ? OR id LIKE ? OR scope_slug LIKE ?)';
       var pattern = `%${query.query}%`;
-      params.push(pattern, pattern);
+      params.push(pattern, pattern, pattern);
     }
 
     sql += ' ORDER BY created_at DESC';
@@ -186,6 +218,7 @@ function rowToEntry(row: Record<string, string>): SessionIndexEntry {
   return {
     id: row.id as SessionId,
     scopeHash: row.scope_hash,
+    scopeSlug: row.scope_slug ?? '',
     scopeType: row.scope_type as 'project' | 'workspace',
     summary: sessionSummaryFrom(row.summary),
     createdAt: new Date(row.created_at),

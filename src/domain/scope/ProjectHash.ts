@@ -30,3 +30,23 @@ export function projectHashFromPath(absolutePath: string): ProjectHash {
 export function normalizeGitRemote(url: string): string {
   return normalizeRemoteUrl(url);
 }
+
+function slugify(value: string): string {
+  var slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'project';
+}
+
+export function projectSlugFromRemote(remoteUrl: string): string {
+  var normalized = normalizeRemoteUrl(remoteUrl);
+  var lastSegment = normalized.split('/').pop() ?? normalized;
+  return slugify(lastSegment);
+}
+
+export function projectSlugFromPath(absolutePath: string): string {
+  var normalized = absolutePath.replace(/\/$/, '');
+  var lastSegment = normalized.split('/').pop() ?? normalized;
+  return slugify(lastSegment);
+}

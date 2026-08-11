@@ -1,8 +1,11 @@
 import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
+import { truncateForContext } from '../../domain/session/ContentTruncation.js';
+import { resolveMaxLoadChars } from '../../infrastructure/config/Limits.js';
 import type { Result } from '../Result.js';
 import { err, ok } from '../Result.js';
+import type { IndexReconciliationService } from '../IndexReconciliationService.js';
 
 export type LoadSessionInput = {
   readonly scope: Scope;
@@ -13,34 +16,45 @@ export type LoadSessionOutput = {
   readonly sessionId: string;
   readonly summary: string;
   readonly createdAt: string;
+  readonly truncated: boolean;
 };
 
 export class LoadSessionUseCase {
   constructor(
     private readonly sessionStore: SessionStore,
     private readonly gitSync: GitSyncPort,
+    private readonly indexReconciliation: IndexReconciliationService,
   ) {}
 
   async execute(input: LoadSessionInput): Promise<Result<LoadSessionOutput>> {
-    await this.pullIfSynced();
+    await this.pullAndReconcileIfSynced();
 
     var session = await this.sessionStore.findLatest(input.scope);
     if (!session) {
       return err('No session found for current scope');
     }
 
+    var maxLength = resolveMaxLoadChars();
+    var truncatedContent = truncateForContext(session.content, maxLength);
+
     return ok({
-      content: session.content,
+      content: truncatedContent.text,
       sessionId: session.id,
       summary: session.summary,
       createdAt: session.createdAt.toISOString(),
+      truncated: truncatedContent.truncated,
     });
   }
 
-  private async pullIfSynced(): Promise<void> {
+  private async pullAndReconcileIfSynced(): Promise<void> {
     var config = await this.gitSync.getConfiguration();
-    if (config.enabled) {
-      await this.gitSync.pull();
+    if (!config.enabled) {
+      return;
+    }
+
+    var pullResult = await this.gitSync.pull();
+    if (pullResult.success) {
+      await this.indexReconciliation.reconcileIfNeeded();
     }
   }
 }

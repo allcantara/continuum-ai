@@ -6,18 +6,33 @@ import type { SessionSummary } from '../session/SessionSummary.js';
 
 export type SessionStore = {
   save(session: Session): Promise<void>;
+  /**
+   * Picks a free session id for `timestamp` within `scope` and persists the session built
+   * from it, as a single atomic operation. Needed because "find a free id" and "write it"
+   * are two separate steps — without both happening under one lock, concurrent saves in the
+   * same scope (e.g. a CLI save racing an MCP save, or parallel MCP tool calls) could pick
+   * the same id and overwrite each other's session file.
+   */
+  saveWithUniqueTimestamp(
+    scope: Scope,
+    timestamp: string,
+    build: (id: SessionId) => Session,
+  ): Promise<Session>;
   findById(scope: Scope, id: SessionId): Promise<Session | null>;
   findLatest(scope: Scope): Promise<Session | null>;
   findRecent(scope: Scope, limit: number): Promise<readonly Session[]>;
   moveToTrash(scope: Scope, id: SessionId): Promise<void>;
   restoreFromTrash(scope: Scope, id: SessionId): Promise<void>;
   moveScopeToTrash(scope: Scope): Promise<void>;
+  restoreScopeFromTrash(scope: Scope): Promise<readonly SessionId[]>;
   listAllSessions(): Promise<readonly Session[]>;
+  countAllSessions(): Promise<number>;
 };
 
 export type SessionIndexEntry = {
   readonly id: SessionId;
   readonly scopeHash: string;
+  readonly scopeSlug: string;
   readonly scopeType: 'project' | 'workspace';
   readonly summary: SessionSummary;
   readonly createdAt: Date;
@@ -36,5 +51,6 @@ export type SessionIndex = {
   search(query: SessionSearchQuery): Promise<readonly SessionIndexEntry[]>;
   updateStatus(id: SessionId, scopeHash: string, status: 'active' | 'trashed'): Promise<void>;
   rebuildFromSessions(sessions: readonly Session[]): Promise<void>;
+  count(): Promise<number>;
   isAvailable(): boolean;
 };

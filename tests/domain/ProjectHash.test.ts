@@ -3,6 +3,8 @@ import {
   normalizeGitRemote,
   projectHashFromPath,
   projectHashFromRemote,
+  projectSlugFromPath,
+  projectSlugFromRemote,
 } from '../../src/domain/scope/ProjectHash.js';
 
 describe('ProjectHash', () => {
@@ -27,5 +29,17 @@ describe('ProjectHash', () => {
 
   it('normalizes remote url for display', () => {
     expect(normalizeGitRemote('git@github.com:user/repo.git')).toBe('https://github.com/user/repo');
+  });
+
+  it('derives a readable slug from the repository name in a remote url', () => {
+    expect(projectSlugFromRemote('git@github.com:allcantara/continuum-ai.git')).toBe('continuum-ai');
+  });
+
+  it('sanitizes characters that are unsafe for a folder name in the remote-based slug', () => {
+    expect(projectSlugFromRemote('git@github.com:user/My_Weird.Repo!.git')).toBe('my-weird-repo');
+  });
+
+  it('derives a readable slug from the last path segment for path-based projects', () => {
+    expect(projectSlugFromPath('/Users/dev/projects/My App')).toBe('my-app');
   });
 });
