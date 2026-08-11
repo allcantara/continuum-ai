@@ -12,28 +12,40 @@ Continuum is a local MCP server and CLI that saves cumulative session snapshots 
 ## Installation
 
 ```bash
-npm install -g continuum
+npm install -g continuum-ai
 ```
 
 Or run from source:
 
 ```bash
-git clone <repo-url>
-cd continuum
+git clone git@github.com:allcantara/continuum-ai.git
+cd continuum-ai
 npm install
 npm run build
 ```
 
 ## MCP Configuration
 
-Add to your MCP client config:
+After a global install, add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "continuum": {
+      "command": "continuum-mcp"
+    }
+  }
+}
+```
+
+For a local checkout, use `node` with the path to the built server:
 
 ```json
 {
   "mcpServers": {
     "continuum": {
       "command": "node",
-      "args": ["/path/to/continuum/dist/presentation/mcp/server.js"]
+      "args": ["/path/to/continuum-ai/dist/presentation/mcp/server.js"]
     }
   }
 }

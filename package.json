@@ -1,10 +1,20 @@
 {
-  "name": "continuum",
+  "name": "continuum-ai",
   "version": "0.1.0",
   "description": "Persist and reuse work context across chats, projects, and tools via MCP and CLI",
+  "author": "Bruno Vinicius Souza Alcantara",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/allcantara/continuum-ai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/allcantara/continuum-ai/issues"
+  },
+  "homepage": "https://github.com/allcantara/continuum-ai#readme",
   "bin": {
-    "continuum": "./dist/presentation/cli/cli.js"
+    "continuum": "./dist/presentation/cli/cli.js",
+    "continuum-mcp": "./dist/presentation/mcp/server.js"
   },
   "files": [
     "dist"
@@ -17,7 +27,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src tests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "engines": {
     "node": ">=24.15.0"
