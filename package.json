@@ -17,7 +17,8 @@
     "continuum-mcp": "dist/presentation/mcp/server.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "scripts"
   ],
   "scripts": {
     "build": "tsc",
@@ -28,7 +29,8 @@
     "test:watch": "vitest",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build",
+    "postinstall": "node ./scripts/postinstall.mjs"
   },
   "engines": {
     "node": ">=24.15.0"

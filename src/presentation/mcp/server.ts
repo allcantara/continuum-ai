@@ -69,73 +69,86 @@ async function main(): Promise<void> {
     version: '0.1.0',
   });
 
-  server.tool(
+  server.registerTool(
     'continuum_save',
-    'Save a cumulative session snapshot of the current work context',
-    saveSchema.shape,
+    {
+      description: 'Save a cumulative session snapshot of the current work context',
+      inputSchema: saveSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleSave(container, await withResolvedRoots(server, args)) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_load',
-    'Load the most recent session for the current project or workspace',
-    loadSchema.shape,
+    {
+      description: 'Load the most recent session for the current project or workspace',
+      inputSchema: loadSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleLoad(container, await withResolvedRoots(server, args)) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_recap',
-    'Load the last N sessions for deeper history (default: 5)',
-    recapSchema.shape,
+    {
+      description: 'Load the last N sessions for deeper history (default: 5)',
+      inputSchema: recapSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleRecap(container, await withResolvedRoots(server, args)) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_list',
-    'Search and list sessions via the index',
-    listSchema.shape,
+    {
+      description: 'Search and list sessions via the index',
+      inputSchema: listSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleList(container, await withResolvedRoots(server, args)) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_sync',
-    'Enable or check git sync configuration',
-    syncSchema.shape,
+    {
+      description: 'Enable or check git sync configuration',
+      inputSchema: syncSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleSync(container, args) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_stash',
-    'Move a session or entire project/workspace to trash',
-    stashSchema.shape,
+    {
+      description: 'Move a session or entire project/workspace to trash',
+      inputSchema: stashSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleStash(container, await withResolvedRoots(server, args)) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_trash',
-    'List items in trash',
-    {},
+    { description: 'List items in trash' },
     async () => ({
       content: [{ type: 'text' as const, text: await handleTrash(container) }],
     }),
   );
 
-  server.tool(
+  server.registerTool(
     'continuum_restore',
-    'Restore a session from trash',
-    restoreSchema.shape,
+    {
+      description: 'Restore a session from trash',
+      inputSchema: restoreSchema.shape,
+    },
     async (args) => ({
       content: [{ type: 'text' as const, text: await handleRestore(container, await withResolvedRoots(server, args)) }],
     }),

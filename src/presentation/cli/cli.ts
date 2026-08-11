@@ -4,6 +4,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { createContainer } from '../../container.js';
+import { setupCursor } from '../../application/setup/SetupCursorUseCase.js';
 import {
   handleList,
   handleLoad,
@@ -118,6 +119,39 @@ async function main(): Promise<void> {
     .action(async (id: string) => {
       var text = await handleRestore(container, { session_id: id });
       console.log(text);
+    });
+
+  var setupCmd = program.command('setup').description('Configure integrations');
+
+  setupCmd
+    .command('cursor')
+    .description('Configure Cursor MCP and slash commands (~/.cursor)')
+    .option('--no-commands', 'Skip installing /continuum-* slash commands')
+    .action(async (options: { commands: boolean }) => {
+      var result = await setupCursor({ installSlashCommands: options.commands });
+      if (!result.ok) {
+        console.error(`Error: ${result.reason}`);
+        process.exit(1);
+      }
+
+      var setup = result.value;
+      if (setup.mcpUpdated) {
+        console.log(`Configured Cursor MCP at ${setup.mcpConfigPath}`);
+      } else {
+        console.log(`Cursor MCP already up to date at ${setup.mcpConfigPath}`);
+      }
+      console.log(`MCP server: ${setup.mcpServerPath}`);
+
+      if (options.commands) {
+        if (setup.commandsInstalled.length > 0) {
+          console.log(`Installed slash commands: ${setup.commandsInstalled.join(', ')}`);
+        }
+        if (setup.commandsSkipped.length > 0) {
+          console.log(`Skipped existing custom commands: ${setup.commandsSkipped.join(', ')}`);
+        }
+      }
+
+      console.log('Reload Cursor (Settings → MCP) to activate.');
     });
 
   await program.parseAsync(process.argv);
