@@ -103,7 +103,7 @@ async function main(): Promise<void> {
 
   var server = new McpServer({
     name: 'continuum',
-    version: '0.1.2',
+    version: '0.1.3',
   });
 
   server.registerTool(
