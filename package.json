@@ -1,6 +1,6 @@
 {
   "name": "continuum-ai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Persist and reuse work context across chats, projects, and tools via MCP and CLI",
   "author": "Bruno Vinicius Souza Alcantara",
   "type": "module",
