@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   program
     .name('continuum')
     .description('Persist and reuse work context across chats, projects, and tools')
-    .version('0.1.3');
+    .version('0.1.5');
 
   program
     .command('save')
