@@ -70,8 +70,8 @@ $CONTINUUM_HOME/                    (padrão: ~/.continuum/)
 
 ### 4.2 Identidade (arquivo local)
 
-- **Projeto**: o arquivo `.continuum.local.json` na raiz git (ou na pasta aberta se não houver git). Contém um UUID (`id`) e o nome da pasta (`folderName`). O UUID é gerado no primeiro `save` e não muda se a pasta for renomeada.
-- **Git**: o arquivo é acrescentado a `.git/info/exclude` nesta cópia do repositório, para não aparecer no `git status` nem ser commitado.
+- **Projeto**: o arquivo `.continuum.local.json` na pasta aberta. Se essa pasta estiver dentro de um repositório git, o arquivo fica na raiz git. Contém um UUID (`id`) e o nome da pasta (`folderName`). O UUID é gerado no primeiro `save` e não muda se a pasta for renomeada. Git não é obrigatório: pasta aleatória ou pasta do usuário também recebem o arquivo.
+- **Git**: quando a pasta é um repositório (ou está dentro de um), o arquivo é acrescentado a `.git/info/exclude` nesta cópia, para não aparecer no `git status` nem ser commitado.
 - **Leitura** (`list` / `load` / `recap` / `stash` / `restore`): sobe da pasta aberta até a raiz git procurando o arquivo. Sem git, não sobe para pastas pai. Se o arquivo não existir, não há projeto Continuum nesta pasta — o primeiro `save` cria o arquivo. `trash` lista a lixeira inteira desta máquina.
 - **Workspace** (multi-root): composição dos UUIDs de cada raiz que já tem o arquivo.
 - **Sem pasta aberta**: bucket fixo `sem-projeto` (hash `unscoped`), só no MCP sem `roots`.
@@ -146,10 +146,10 @@ continuum restore <id> | --project
 
 ## 6. Local apenas
 
-Não há sincronização git de `~/.continuum/`. O git do projeto aberto é usado só para:
+Não há sincronização git de `~/.continuum/`. O arquivo `.continuum.local.json` é criado no primeiro `save` mesmo quando a pasta não é um repositório git (pasta aleatória, pasta do usuário, etc.). O git do projeto aberto, quando existe, é usado só para:
 
-- colocar `.continuum.local.json` na raiz do repositório;
-- acrescentar esse arquivo a `.git/info/exclude` nesta cópia.
+- colocar o arquivo na raiz do repositório (em vez da subpasta aberta);
+- acrescentar esse arquivo a `.git/info/exclude` nesta cópia, para não ser versionado.
 
 ## 7. Lixeira
 

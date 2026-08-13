@@ -28,17 +28,18 @@ export class FileSystemProjectMarkerStore implements ProjectMarkerStore {
 
     var start = resolve(absolutePath);
     var gitRoot = await findGitRoot(start);
-    var home = gitRoot ?? start;
+    var markerDir = gitRoot ?? start;
     var marker: ProjectMarker = {
       id: randomUUID().toLowerCase(),
-      folderName: basename(home) || 'project',
+      folderName: basename(markerDir) || 'project',
     };
+
+    await writeFile(join(markerDir, PROJECT_MARKER_FILENAME), serializeProjectMarker(marker), 'utf-8');
 
     if (gitRoot) {
       await excludeFromLocalGit(gitRoot);
     }
 
-    await writeFile(join(home, PROJECT_MARKER_FILENAME), serializeProjectMarker(marker), 'utf-8');
     return marker;
   }
 

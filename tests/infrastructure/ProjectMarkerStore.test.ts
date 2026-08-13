@@ -31,6 +31,41 @@ describe('FileSystemProjectMarkerStore', () => {
     expect(again.id).toBe(created.id);
   });
 
+  it('creates the marker file in a folder that is not a git repository', async () => {
+    var projectDir = join(tempDir, 'random-notes');
+    await mkdir(projectDir);
+    var store = new FileSystemProjectMarkerStore();
+
+    var created = await store.ensureFromPath(projectDir);
+    var found = await store.findFromPath(projectDir);
+    var raw = await readFile(join(projectDir, PROJECT_MARKER_FILENAME), 'utf-8');
+
+    expect(found?.id).toBe(created.id);
+    expect(raw).toContain(created.id);
+    await expect(readFile(join(projectDir, '.git', 'info', 'exclude'), 'utf-8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('places the marker at the git root when saving from a subdirectory', async () => {
+    var repo = join(tempDir, 'repo');
+    var nested = join(repo, 'packages', 'api');
+    await mkdir(join(repo, '.git', 'info'), { recursive: true });
+    await mkdir(nested, { recursive: true });
+    var store = new FileSystemProjectMarkerStore();
+
+    var created = await store.ensureFromPath(nested);
+
+    expect(created.folderName).toBe('repo');
+    var raw = await readFile(join(repo, PROJECT_MARKER_FILENAME), 'utf-8');
+    expect(raw).toContain(created.id);
+    await expect(readFile(join(nested, PROJECT_MARKER_FILENAME), 'utf-8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    var exclude = await readFile(join(repo, '.git', 'info', 'exclude'), 'utf-8');
+    expect(exclude).toContain(PROJECT_MARKER_FILENAME);
+  });
+
   it('finds the marker from a subdirectory of a git repo', async () => {
     var repo = join(tempDir, 'repo');
     var nested = join(repo, 'packages', 'api');

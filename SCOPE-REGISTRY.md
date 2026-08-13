@@ -2,7 +2,7 @@
 
 A identidade de um projeto **não** usa mais o registro de aliases (remoto git / caminho).
 
-Fonte única: o arquivo `.continuum.local.json` na raiz git (ou na pasta aberta, se não houver git).
+Fonte única: o arquivo `.continuum.local.json` na pasta aberta (ou na raiz git, se a pasta estiver dentro de um repositório). Git não é obrigatório.
 
 - Criado no primeiro `save`.
 - Contém `id` (UUID) e `folderName`.

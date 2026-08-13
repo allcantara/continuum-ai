@@ -13,7 +13,7 @@ Architecture and design decisions: [DESIGN.md](./DESIGN.md)
 ## Requirements
 
 - Node.js >= 24.15 (for built-in `node:sqlite` with FTS5)
-- Git (optional): used only to place `.continuum.local.json` at the repository root and to ignore it in this clone (`.git/info/exclude`)
+- Git (optional): used only to ignore `.continuum.local.json` in this clone (`.git/info/exclude`). The marker file is created on first save even when the folder is not a git repository.
 - [Cursor](https://cursor.com) (optional, for automatic IDE setup)
 
 ## Quick start (Cursor)
@@ -64,7 +64,7 @@ The CLI does **not** need `roots` — it uses the terminal's current directory, 
 
 Continuum does **not** infer identity from git remotes, `package.json`, or `pom.xml`.
 
-On the first **save** in a folder, it creates `.continuum.local.json` at the git root (or in the folder itself if there is no git). The file looks like:
+On the first **save** in a folder, it creates `.continuum.local.json` in that folder. If the folder is inside a git repository, the file is created at the git root instead. Git is not required — a random folder or your home directory works the same way. The file looks like:
 
 ```json
 {
