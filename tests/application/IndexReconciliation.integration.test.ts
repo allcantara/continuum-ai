@@ -23,4 +23,37 @@ describe('Index reconciliation on boot', () => {
       expect(listResult.value.sessions[0]!.sessionId).toBe('2026-08-10-1430');
     }
   });
+
+  it('rebuilds a stale index with phantom entries when list is called', async () => {
+    var home = await mkdtemp(join(tmpdir(), 'continuum-reconcile-list-'));
+    var scope = projectScope(projectHashFromPath('/test/reconcile-list'), 'reconcile-list');
+    var sessionsDir = join(home, 'projects', scopeFolderName(scope), 'sessions');
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(join(sessionsDir, '2026-08-10-1430.md'), 'Real session on disk\n\nBody.');
+    await writeFile(join(sessionsDir, '2026-08-10-1500.md'), 'Second real session\n\nBody.');
+
+    var container = await createContainer(home);
+    await container.sessionIndex.upsert(
+      {
+        id: '2026-08-10-9999',
+        scopeHash: scope.hash,
+        scopeSlug: scope.slug,
+        scopeType: scope.type,
+        summary: 'Phantom session',
+        createdAt: new Date('2026-08-10T09:59:00.000Z'),
+        status: 'active',
+      },
+      'Phantom content',
+    );
+
+    var listResult = await container.listSessions.execute({ scope });
+
+    expect(listResult.ok).toBe(true);
+    if (listResult.ok) {
+      expect(listResult.value.sessions.map((entry) => entry.sessionId).sort()).toEqual([
+        '2026-08-10-1430',
+        '2026-08-10-1500',
+      ]);
+    }
+  });
 });

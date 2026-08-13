@@ -4,6 +4,7 @@ import type { Scope } from '../../domain/scope/Scope.js';
 import type { Result } from '../Result.js';
 import { ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
+import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type ListSessionsInput = {
   readonly scope?: Scope;
@@ -32,7 +33,7 @@ export class ListSessionsUseCase {
   ) {}
 
   async execute(input: ListSessionsInput): Promise<Result<ListSessionsOutput>> {
-    await this.pullAndReconcileIfSynced();
+    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
 
     var searchQuery: {
       query?: string;
@@ -63,17 +64,5 @@ export class ListSessionsUseCase {
         createdAt: entry.createdAt.toISOString(),
       })),
     });
-  }
-
-  private async pullAndReconcileIfSynced(): Promise<void> {
-    var config = await this.gitSync.getConfiguration();
-    if (!config.enabled) {
-      return;
-    }
-
-    var pullResult = await this.gitSync.pull();
-    if (pullResult.success) {
-      await this.indexReconciliation.reconcileIfNeeded();
-    }
   }
 }

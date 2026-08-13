@@ -3,6 +3,7 @@ import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { Result } from '../Result.js';
 import { ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
+import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type ListTrashEntry = {
   readonly sessionId: string;
@@ -25,7 +26,7 @@ export class ListTrashUseCase {
   ) {}
 
   async execute(): Promise<Result<ListTrashOutput>> {
-    await this.pullAndReconcileIfSynced();
+    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
 
     var entries = await this.sessionIndex.search({ status: 'trashed' });
 
@@ -39,17 +40,5 @@ export class ListTrashUseCase {
         createdAt: entry.createdAt.toISOString(),
       })),
     });
-  }
-
-  private async pullAndReconcileIfSynced(): Promise<void> {
-    var config = await this.gitSync.getConfiguration();
-    if (!config.enabled) {
-      return;
-    }
-
-    var pullResult = await this.gitSync.pull();
-    if (pullResult.success) {
-      await this.indexReconciliation.reconcileIfNeeded();
-    }
   }
 }

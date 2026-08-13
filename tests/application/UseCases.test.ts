@@ -29,6 +29,7 @@ function createMocks() {
   var sessionIndex: SessionIndex = {
     upsert: vi.fn(),
     search: vi.fn().mockResolvedValue([]),
+    listAllEntries: vi.fn().mockResolvedValue([]),
     updateStatus: vi.fn(),
     rebuildFromSessions: vi.fn(),
     count: vi.fn().mockResolvedValue(0),

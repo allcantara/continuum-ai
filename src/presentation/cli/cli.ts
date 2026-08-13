@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { createContainer } from '../../container.js';
 import { setupCursor } from '../../application/setup/SetupCursorUseCase.js';
+import { PACKAGE_VERSION } from '../../infrastructure/config/packageVersion.js';
 import {
   handleList,
   handleLoad,
@@ -23,6 +24,10 @@ function openEditor(): string {
   return readFileSync(tmpFile, 'utf-8');
 }
 
+function resolveCliRoots(roots?: string[]): string[] | undefined {
+  return roots && roots.length > 0 ? roots : undefined;
+}
+
 async function main(): Promise<void> {
   var container = await createContainer();
   var program = new Command();
@@ -30,23 +35,29 @@ async function main(): Promise<void> {
   program
     .name('continuum')
     .description('Persist and reuse work context across chats, projects, and tools')
-    .version('0.1.7');
+    .version(PACKAGE_VERSION);
 
   program
     .command('save')
     .description('Save current session context')
     .option('-m, --message <summary>', 'Short summary')
-    .action(async (options: { message?: string }) => {
+    .option('--roots <path...>', 'Absolute workspace path(s); defaults to the current directory')
+    .action(async (options: { message?: string; roots?: string[] }) => {
       var content = openEditor();
-      var text = await handleSave(container, { content, summary: options.message }, 'cli');
+      var text = await handleSave(
+        container,
+        { content, summary: options.message, roots: resolveCliRoots(options.roots) },
+        'cli',
+      );
       console.log(text);
     });
 
   program
     .command('load')
     .description('Load the most recent session')
-    .action(async () => {
-      var text = await handleLoad(container, {}, 'cli');
+    .option('--roots <path...>', 'Absolute workspace path(s); defaults to the current directory')
+    .action(async (options: { roots?: string[] }) => {
+      var text = await handleLoad(container, { roots: resolveCliRoots(options.roots) }, 'cli');
       console.log(text);
     });
 
@@ -54,8 +65,13 @@ async function main(): Promise<void> {
     .command('recap')
     .description('Load last N sessions')
     .option('--last <n>', 'Number of sessions', '5')
-    .action(async (options: { last: string }) => {
-      var text = await handleRecap(container, { last: Number(options.last) }, 'cli');
+    .option('--roots <path...>', 'Absolute workspace path(s); defaults to the current directory')
+    .action(async (options: { last: string; roots?: string[] }) => {
+      var text = await handleRecap(
+        container,
+        { last: Number(options.last), roots: resolveCliRoots(options.roots) },
+        'cli',
+      );
       console.log(text);
     });
 
@@ -64,10 +80,15 @@ async function main(): Promise<void> {
     .description('Search and list sessions')
     .option('-q, --query <search>', 'Search query')
     .option('--all-projects', 'Search across all projects')
-    .action(async (options: { query?: string; allProjects?: boolean }) => {
+    .option('--roots <path...>', 'Absolute workspace path(s); defaults to the current directory')
+    .action(async (options: { query?: string; allProjects?: boolean; roots?: string[] }) => {
       var text = await handleList(
         container,
-        { query: options.query, all_projects: options.allProjects },
+        {
+          query: options.query,
+          all_projects: options.allProjects,
+          roots: resolveCliRoots(options.roots),
+        },
         'cli',
       );
       console.log(text);
@@ -97,10 +118,15 @@ async function main(): Promise<void> {
     .description('Move session or project to trash')
     .option('--session <id>', 'Session ID to stash')
     .option('--project', 'Stash entire project/workspace')
-    .action(async (options: { session?: string; project?: boolean }) => {
+    .option('--roots <path...>', 'Absolute workspace path(s); defaults to the current directory')
+    .action(async (options: { session?: string; project?: boolean; roots?: string[] }) => {
       var text = await handleStash(
         container,
-        { session_id: options.session, project: options.project },
+        {
+          session_id: options.session,
+          project: options.project,
+          roots: resolveCliRoots(options.roots),
+        },
         'cli',
       );
       console.log(text);
@@ -119,10 +145,15 @@ async function main(): Promise<void> {
     .description('Restore session or project from trash')
     .argument('[id]', 'Session ID to restore')
     .option('--project', 'Restore entire project/workspace')
-    .action(async (id: string | undefined, options: { project?: boolean }) => {
+    .option('--roots <path...>', 'Absolute workspace path(s); defaults to the current directory')
+    .action(async (id: string | undefined, options: { project?: boolean; roots?: string[] }) => {
       var text = await handleRestore(
         container,
-        { session_id: id, project: options.project },
+        {
+          session_id: id,
+          project: options.project,
+          roots: resolveCliRoots(options.roots),
+        },
         'cli',
       );
       console.log(text);

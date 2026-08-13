@@ -19,6 +19,10 @@ export class PlainTextFallbackIndex implements SessionIndex {
     this.contentMap.set(`${entry.scopeHash}:${entry.id}`, content);
   }
 
+  async listAllEntries(): Promise<readonly SessionIndexEntry[]> {
+    return [...this.entries];
+  }
+
   async search(query: SessionSearchQuery): Promise<readonly SessionIndexEntry[]> {
     var status = query.status ?? 'active';
     var results = this.entries.filter((e) => e.status === status);

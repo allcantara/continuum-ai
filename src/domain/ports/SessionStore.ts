@@ -49,6 +49,7 @@ export type SessionSearchQuery = {
 export type SessionIndex = {
   upsert(entry: SessionIndexEntry, content: SessionContent): Promise<void>;
   search(query: SessionSearchQuery): Promise<readonly SessionIndexEntry[]>;
+  listAllEntries(): Promise<readonly SessionIndexEntry[]>;
   updateStatus(id: SessionId, scopeHash: string, status: 'active' | 'trashed'): Promise<void>;
   rebuildFromSessions(sessions: readonly Session[]): Promise<void>;
   count(): Promise<number>;

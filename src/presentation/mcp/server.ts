@@ -3,6 +3,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createContainer } from '../../container.js';
+import { PACKAGE_VERSION } from '../../infrastructure/config/packageVersion.js';
 import {
   handleList,
   handleLoad,
@@ -104,7 +105,7 @@ async function main(): Promise<void> {
 
   var server = new McpServer({
     name: 'continuum',
-    version: '0.1.7',
+    version: PACKAGE_VERSION,
   });
 
   server.registerTool(

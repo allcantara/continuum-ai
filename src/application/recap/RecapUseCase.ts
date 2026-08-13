@@ -6,6 +6,7 @@ import { resolveMaxRecapChars } from '../../infrastructure/config/Limits.js';
 import type { Result } from '../Result.js';
 import { err, ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
+import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type RecapSessionInput = {
   readonly scope: Scope;
@@ -35,7 +36,7 @@ export class RecapUseCase {
   ) {}
 
   async execute(input: RecapSessionInput): Promise<Result<RecapSessionOutput>> {
-    await this.pullAndReconcileIfSynced();
+    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
 
     var limit = input.last ?? DEFAULT_RECAP_COUNT;
     var sessions = await this.sessionStore.findRecent(input.scope, limit);
@@ -61,17 +62,5 @@ export class RecapUseCase {
       anyTruncated: mappedSessions.some((entry) => entry.truncated),
       sessions: mappedSessions,
     });
-  }
-
-  private async pullAndReconcileIfSynced(): Promise<void> {
-    var config = await this.gitSync.getConfiguration();
-    if (!config.enabled) {
-      return;
-    }
-
-    var pullResult = await this.gitSync.pull();
-    if (pullResult.success) {
-      await this.indexReconciliation.reconcileIfNeeded();
-    }
   }
 }

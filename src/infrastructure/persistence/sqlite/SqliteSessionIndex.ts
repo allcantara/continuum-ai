@@ -74,6 +74,14 @@ export class SqliteSessionIndex implements SessionIndex {
     return this.searchSimple(db, query);
   }
 
+  async listAllEntries(): Promise<readonly SessionIndexEntry[]> {
+    var db = this.requireDb();
+    var rows = db
+      .prepare('SELECT id, scope_hash, scope_slug, scope_type, summary, created_at, status FROM sessions')
+      .all() as Record<string, string>[];
+    return rows.map(rowToEntry);
+  }
+
   async updateStatus(id: SessionId, scopeHash: string, status: 'active' | 'trashed'): Promise<void> {
     var db = this.requireDb();
     db.prepare(`UPDATE sessions SET status = ? WHERE id = ? AND scope_hash = ?`).run(status, id, scopeHash);

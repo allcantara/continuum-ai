@@ -6,6 +6,7 @@ import { resolveMaxLoadChars } from '../../infrastructure/config/Limits.js';
 import type { Result } from '../Result.js';
 import { err, ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
+import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type LoadSessionInput = {
   readonly scope: Scope;
@@ -27,7 +28,7 @@ export class LoadSessionUseCase {
   ) {}
 
   async execute(input: LoadSessionInput): Promise<Result<LoadSessionOutput>> {
-    await this.pullAndReconcileIfSynced();
+    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
 
     var session = await this.sessionStore.findLatest(input.scope);
     if (!session) {
@@ -44,17 +45,5 @@ export class LoadSessionUseCase {
       createdAt: session.createdAt.toISOString(),
       truncated: truncatedContent.truncated,
     });
-  }
-
-  private async pullAndReconcileIfSynced(): Promise<void> {
-    var config = await this.gitSync.getConfiguration();
-    if (!config.enabled) {
-      return;
-    }
-
-    var pullResult = await this.gitSync.pull();
-    if (pullResult.success) {
-      await this.indexReconciliation.reconcileIfNeeded();
-    }
   }
 }
