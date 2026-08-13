@@ -8,6 +8,7 @@ import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
 import { createSession } from '../../src/domain/session/Session.js';
 import { sessionContentFrom } from '../../src/domain/session/SessionContent.js';
 import { sessionIdFrom } from '../../src/domain/session/SessionId.js';
+import { sessionSummaryFrom } from '../../src/domain/session/SessionSummary.js';
 import { FileSystemSessionStore } from '../../src/infrastructure/persistence/filesystem/FileSystemSessionStore.js';
 
 describe('FileSystemSessionStore integration', () => {
