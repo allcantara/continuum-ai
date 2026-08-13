@@ -236,7 +236,7 @@ continuum ui                      # local inspect UI at http://127.0.0.1:3847
 
 ### Inspect in the browser
 
-`continuum ui` starts a local HTTP server on `127.0.0.1` (not the future remote MCP server). It prints the URL. Open it in a browser, then press Ctrl+C in the terminal to stop. Closing the tab does not stop the process.
+`continuum ui` starts a local HTTP server on `127.0.0.1` (not the future remote MCP server). It prints the URL. Open it in a browser, then press Ctrl+C in the terminal to stop. Closing the tab does not stop the process. The page loads Bootstrap 5 from a CDN, so styling needs an internet connection.
 
 ```bash
 continuum ui

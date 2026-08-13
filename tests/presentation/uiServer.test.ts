@@ -32,7 +32,9 @@ describe('Continuum UI server', () => {
   it('lists projects, shows session markdown, and stashes to trash', async () => {
     var page = await fetch(server.url);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain('Continuum');
+    var html = await page.text();
+    expect(html).toContain('Continuum');
+    expect(html).toContain('cdn.jsdelivr.net/npm/bootstrap@5.3.8');
 
     var projects = await json(`${server.url}/api/projects`);
     expect(projects.projects).toEqual([
