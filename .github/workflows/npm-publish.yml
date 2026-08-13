@@ -37,6 +37,9 @@ jobs:
           registry-url: https://registry.npmjs.org/
           cache: npm
 
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: npm ci
 
@@ -69,8 +72,6 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish to npm
+      - name: Publish to npm via trusted publishing (OIDC)
         if: steps.npm-version.outputs.publish == 'true'
-        run: npm publish --access public --provenance --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --ignore-scripts
