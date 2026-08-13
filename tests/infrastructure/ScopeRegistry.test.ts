@@ -72,4 +72,54 @@ describe('SqliteScopeRegistry', () => {
     var found = await registry.findByAliases([{ alias: subdir, kind: 'path' }]);
     expect(found?.scopeHash).toBe(canonicalHash);
   });
+
+  it('prefers the longest path alias when kind priority is equal', async () => {
+    var { SqliteScopeRegistry } = await import(
+      '../../src/infrastructure/persistence/sqlite/SqliteScopeRegistry.js'
+    );
+    var registry = new SqliteScopeRegistry(tempHome);
+    await registry.initialize();
+
+    var parentHash = projectHashFromPath('/parent-scope');
+    var childHash = projectHashFromPath('/child-scope');
+    await registry.register(projectScope(parentHash, 'parent'), [
+      { alias: '/Users/dev', kind: 'path' },
+    ]);
+    await registry.register(projectScope(childHash, 'child'), [
+      { alias: '/Users/dev/projects/s3', kind: 'path' },
+    ]);
+
+    var found = await registry.findByAliases([
+      { alias: '/Users/dev', kind: 'path' },
+      { alias: '/Users/dev/projects/s3', kind: 'path' },
+    ]);
+    expect(found?.scopeHash).toBe(childHash);
+  });
+
+  it('drops parent-directory path aliases on initialize so sibling projects stay isolated', async () => {
+    var { SqliteScopeRegistry } = await import(
+      '../../src/infrastructure/persistence/sqlite/SqliteScopeRegistry.js'
+    );
+    var registry = new SqliteScopeRegistry(tempHome);
+    await registry.initialize();
+
+    var canonicalHash = projectHashFromPath('/canonical-hash');
+    var repoRoot = '/Users/dev/projects/continuum';
+    await registry.register(projectScope(canonicalHash, 'continuum', repoRoot), [
+      { alias: '/', kind: 'path' },
+      { alias: '/Users/dev', kind: 'path' },
+      { alias: '/Users/dev/projects', kind: 'path' },
+      { alias: repoRoot, kind: 'git_root' },
+    ]);
+
+    var reopened = new SqliteScopeRegistry(tempHome);
+    await reopened.initialize();
+
+    expect(await reopened.findByAliases([{ alias: '/', kind: 'path' }])).toBeNull();
+    expect(await reopened.findByAliases([{ alias: '/Users/dev', kind: 'path' }])).toBeNull();
+    expect(await reopened.findByAliases([{ alias: '/Users/dev/projects', kind: 'path' }])).toBeNull();
+    expect((await reopened.findByAliases([{ alias: repoRoot, kind: 'git_root' }]))?.scopeHash).toBe(
+      canonicalHash,
+    );
+  });
 });

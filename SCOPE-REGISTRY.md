@@ -37,10 +37,12 @@ CREATE TABLE scope_aliases (
 
 1. Normalizar entrada: subir até a **raiz git** (`findGitRoot`).
 2. Resolver identidade (remoto git ou hash do caminho na raiz).
-3. Montar **aliases** (remoto, git root, cwd e ancestrais do caminho).
+3. Montar **aliases**: remoto git, raiz git, e caminhos da pasta atual **até a raiz git** (inclusive). Não registrar ancestrais acima da raiz git (`/Users`, `/`, pasta pai de vários repos).
 4. Consultar `scope_aliases` → obter `scope_hash` canônico.
 5. Se não encontrar: `findByPathHint` (disco) como fallback v1.
 6. Registrar aliases no registry (enriquece consultas futuras).
+
+Na abertura do índice, aliases de caminho **acima da raiz git** (incluindo `/`) são removidos — lixo de versões anteriores que fazia projetos irmãos herdarem o primeiro escopo salvo.
 
 ### Por que UUID + scope_hash?
 
@@ -56,12 +58,13 @@ CREATE TABLE scope_aliases (
 
 ## Prioridade na busca por alias
 
-Quando vários aliases casam, preferência: `remote` > `git_root` > `path`.
+Quando vários aliases casam, preferência: `remote` > `git_root` > `path`. Empate de tipo: o alias mais longo (caminho mais específico).
 
 ## Limitações conhecidas
 
 - Workspace multi-root: registry foca em projeto; workspace continua por hash composto.
-- Alias collision (dois projetos, mesmo caminho em máquinas diferentes): primeiro registrado vence; sync git pode expor isso — documentar.
+- Alias de caminho **nunca** sobe além da raiz git. Sem isso, `/Users/dev` (ou `/`) ficava associado ao primeiro projeto salvo e `list`/`load` em outro repo da mesma máquina devolviam as sessões dele.
+- Alias collision (dois clones do mesmo remoto, ou o mesmo caminho em máquinas diferentes): primeiro registrado vence; sync git pode expor isso — documentar.
 - Registry é derivado: bootstrap + `persistAliases` na resolução reconstruem estado; fonte de verdade continua sendo `meta.md` + estrutura de pastas.
 
 ## Evolução (v2)

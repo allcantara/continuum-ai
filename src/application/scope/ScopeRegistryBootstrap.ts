@@ -1,7 +1,7 @@
 import type { GitRemoteReader } from '../../domain/ports/GitRemoteReader.js';
 import type { ScopeRegistry } from '../../domain/ports/ScopeRegistry.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
-import { isPlausibleGitRemote } from '../../domain/scope/ProjectHash.js';
+import { isAbsoluteFilesystemPath, isPlausibleGitRemote } from '../../domain/scope/ProjectHash.js';
 import { buildScopeAliases } from '../scope/ScopeAliasBuilder.js';
 
 export class ScopeRegistryBootstrap {
@@ -41,7 +41,9 @@ export class ScopeRegistryBootstrap {
         continue;
       }
 
-      var gitRoot = await this.gitRemoteReader.findRepositoryRoot(sourceHint);
+      var gitRoot = isAbsoluteFilesystemPath(sourceHint)
+        ? await this.gitRemoteReader.findRepositoryRoot(sourceHint)
+        : null;
       var aliases = buildScopeAliases(sourceHint, gitRoot, {
         hash: session.scope.hash,
         slug: session.scope.slug,

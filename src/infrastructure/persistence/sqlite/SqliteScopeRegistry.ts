@@ -40,6 +40,7 @@ export class SqliteScopeRegistry implements ScopeRegistry {
       this.db.exec('PRAGMA busy_timeout = 5000');
       this.db.exec('PRAGMA journal_mode = WAL');
       this.createSchema();
+      this.pruneOverbroadPathAliases();
     } catch {
       this.db = null;
     }
@@ -66,12 +67,15 @@ export class SqliteScopeRegistry implements ScopeRegistry {
     }
 
     var best = rows.reduce((current, row) => {
-      if (!current) {
-        return row;
-      }
       var currentKind = KIND_PRIORITY[current.alias_kind] ?? 99;
       var rowKind = KIND_PRIORITY[row.alias_kind] ?? 99;
-      return rowKind < currentKind ? row : current;
+      if (rowKind < currentKind) {
+        return row;
+      }
+      if (rowKind > currentKind) {
+        return current;
+      }
+      return (row.alias?.length ?? 0) > (current.alias?.length ?? 0) ? row : current;
     }, rows[0]!);
 
     return {
@@ -127,6 +131,25 @@ export class SqliteScopeRegistry implements ScopeRegistry {
         alias_kind TEXT NOT NULL DEFAULT 'path'
       );
       CREATE INDEX IF NOT EXISTS idx_scope_aliases_scope_id ON scope_aliases(scope_id);
+    `);
+  }
+
+  private pruneOverbroadPathAliases(): void {
+    var db = this.requireDb();
+    db.exec(`
+      DELETE FROM scope_aliases
+      WHERE rowid IN (
+        SELECT a.rowid FROM scope_aliases a
+        WHERE a.alias = '/'
+           OR (
+             a.alias_kind = 'path'
+             AND EXISTS (
+               SELECT 1 FROM scope_aliases b
+               WHERE b.alias_kind IN ('path', 'git_root')
+                 AND b.alias LIKE a.alias || '/%'
+             )
+           )
+      )
     `);
   }
 
