@@ -30,7 +30,12 @@ export class ScopeRegistryBootstrap {
       }
       seen.add(hash);
 
-      var sourceHint = session.scope.type === 'project' ? session.scope.sourceHint : undefined;
+      if (session.scope.type !== 'project') {
+        await this.scopeRegistry.register(session.scope, []);
+        continue;
+      }
+
+      var sourceHint = session.scope.sourceHint;
       if (!sourceHint) {
         await this.scopeRegistry.register(session.scope, []);
         continue;
