@@ -47,7 +47,7 @@ export async function createContainer(home?: string): Promise<Container> {
 
   var gitRemoteReader = new GitRemoteReader();
   var gitSync = new GitSyncAdapter(resolvedHome);
-  var scopeResolution = new ScopeResolutionService(gitRemoteReader);
+  var scopeResolution = new ScopeResolutionService(gitRemoteReader, sessionStore);
 
   return {
     home: resolvedHome,

@@ -4,6 +4,7 @@ export type ProjectIdentity = {
   readonly hash: ProjectHash;
   readonly slug: string;
   readonly sourceHint: string;
+  readonly fromRemote: boolean;
 };
 
 export type GitRemoteReader = {

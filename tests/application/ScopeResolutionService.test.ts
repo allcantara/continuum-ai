@@ -5,7 +5,7 @@ import { isUnscoped } from '../../src/domain/scope/Scope.js';
 import type { GitRemoteReader, ProjectIdentity } from '../../src/domain/ports/GitRemoteReader.js';
 
 function identityFromPath(path: string): ProjectIdentity {
-  return { hash: projectHashFromPath(path), slug: projectSlugFromPath(path), sourceHint: path };
+  return { hash: projectHashFromPath(path), slug: projectSlugFromPath(path), sourceHint: path, fromRemote: false };
 }
 
 describe('ScopeResolutionService', () => {
@@ -61,6 +61,7 @@ describe('ScopeResolutionService', () => {
       hash: projectHashFromPath('/would-be-different-if-path-based'),
       slug: 'repo',
       sourceHint: 'https://github.com/user/repo',
+      fromRemote: true,
     };
     var gitRemoteReader: GitRemoteReader = {
       readRemoteUrl: vi.fn().mockResolvedValue('git@github.com:user/repo.git'),
@@ -89,5 +90,55 @@ describe('ScopeResolutionService', () => {
 
     expect(first.hash).toBe(second.hash);
     expect(isUnscoped(first)).toBe(true);
+  });
+
+  it('reuses an existing project identity when git remote is unavailable', async () => {
+    var pathIdentity = identityFromPath('/Users/dev/git/cpc-refinancing-app-bff');
+    var stored: ProjectIdentity = {
+      hash: projectHashFromPath('/stored-remote-hash-stand-in'),
+      slug: 'cpc-refinancing-app-bff',
+      sourceHint: 'https://gitlab.example/cpc-refinancing-app-bff',
+      fromRemote: true,
+    };
+    var findByPathHint = vi.fn().mockResolvedValue(stored);
+    var service = new ScopeResolutionService(
+      {
+        readRemoteUrl: vi.fn(),
+        resolveProjectIdentity: vi.fn().mockResolvedValue(pathIdentity),
+      },
+      { findByPathHint },
+    );
+
+    var result = await service.resolve({ roots: ['/Users/dev/git/cpc-refinancing-app-bff'] });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.hash).toBe(stored.hash);
+      expect(result.value.slug).toBe('cpc-refinancing-app-bff');
+    }
+    expect(findByPathHint).toHaveBeenCalledWith(
+      '/Users/dev/git/cpc-refinancing-app-bff',
+      'cpc-refinancing-app-bff',
+    );
+  });
+
+  it('does not look up existing projects when the git remote was resolved', async () => {
+    var remoteIdentity: ProjectIdentity = {
+      hash: projectHashFromPath('/remote'),
+      slug: 'repo',
+      sourceHint: 'https://github.com/user/repo',
+      fromRemote: true,
+    };
+    var findByPathHint = vi.fn();
+    var service = new ScopeResolutionService(
+      {
+        readRemoteUrl: vi.fn(),
+        resolveProjectIdentity: vi.fn().mockResolvedValue(remoteIdentity),
+      },
+      { findByPathHint },
+    );
+
+    await service.resolve({ roots: ['/some/checkout'] });
+    expect(findByPathHint).not.toHaveBeenCalled();
   });
 });

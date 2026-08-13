@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Container } from '../../src/container.js';
-import { isUnscoped, projectScope } from '../../src/domain/scope/Scope.js';
+import { isUnscoped, projectScope, unscopedProjectScope } from '../../src/domain/scope/Scope.js';
 import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
-import { handleRestore, handleStash, handleSync, resolveScope } from '../../src/presentation/mcp/tools/handlers.js';
-import { ok } from '../../src/application/Result.js';
+import { handleList, handleLoad, handleRecap, handleRestore, handleStash, handleSync, resolveScope } from '../../src/presentation/mcp/tools/handlers.js';
+import { err, ok } from '../../src/application/Result.js';
 
 function containerWithScopeResolution(overrides: {
   resolve?: ReturnType<typeof vi.fn>;
@@ -69,6 +69,67 @@ describe('resolveScope', () => {
     expect(resolveFromPath).not.toHaveBeenCalled();
     expect(resolveUnscoped).toHaveBeenCalled();
     expect(isUnscoped(scope)).toBe(true);
+  });
+});
+
+describe('handleList', () => {
+  it('tells the caller to pass roots or use all_projects when the unscoped bucket is empty', async () => {
+    var container = {
+      scopeResolution: {
+        resolve: vi.fn(),
+        resolveFromPath: vi.fn(),
+        resolveUnscoped: vi.fn().mockReturnValue(unscopedProjectScope()),
+      },
+      listSessions: {
+        execute: vi.fn().mockResolvedValue(ok({ sessions: [] })),
+      },
+    } as unknown as Container;
+
+    var response = await handleList(container, {}, 'mcp');
+
+    expect(response).toContain('sem-projeto');
+    expect(response).toContain('all_projects');
+    expect(response).toContain('roots');
+  });
+});
+
+describe('handleLoad', () => {
+  it('explains the empty unscoped bucket instead of a generic not-found error', async () => {
+    var container = {
+      scopeResolution: {
+        resolve: vi.fn(),
+        resolveFromPath: vi.fn(),
+        resolveUnscoped: vi.fn().mockReturnValue(unscopedProjectScope()),
+      },
+      loadSession: {
+        execute: vi.fn().mockResolvedValue(err('No session found for current scope')),
+      },
+    } as unknown as Container;
+
+    var response = await handleLoad(container, {}, 'mcp');
+
+    expect(response).toContain('sem-projeto');
+    expect(response).toContain('all_projects');
+  });
+});
+
+describe('handleRecap', () => {
+  it('explains the empty unscoped bucket instead of a generic not-found error', async () => {
+    var container = {
+      scopeResolution: {
+        resolve: vi.fn(),
+        resolveFromPath: vi.fn(),
+        resolveUnscoped: vi.fn().mockReturnValue(unscopedProjectScope()),
+      },
+      recap: {
+        execute: vi.fn().mockResolvedValue(err('No sessions found for current scope')),
+      },
+    } as unknown as Container;
+
+    var response = await handleRecap(container, {}, 'mcp');
+
+    expect(response).toContain('sem-projeto');
+    expect(response).toContain('roots');
   });
 });
 

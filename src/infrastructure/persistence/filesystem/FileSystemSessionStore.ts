@@ -1,14 +1,15 @@
 import { mkdir, readdir, readFile, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionStore } from '../../../domain/ports/SessionStore.js';
-import type { ProjectHash } from '../../../domain/scope/ProjectHash.js';
+import type { ProjectIdentity } from '../../../domain/ports/GitRemoteReader.js';
+import { isPlausibleGitRemote, projectHashFromPath, type ProjectHash } from '../../../domain/scope/ProjectHash.js';
+import { projectScope, scopeFolderName, workspaceScope } from '../../../domain/scope/Scope.js';
 import {
-  UNSCOPED_PROJECT_HASH,
-  isUnscoped,
-  projectScope,
-  scopeFolderName,
-  workspaceScope,
-} from '../../../domain/scope/Scope.js';
+  isProjectMetaIncomplete,
+  parseProjectMeta,
+  parseScopeDirName,
+  serializeProjectMeta,
+} from './ProjectMeta.js';
 import type { Scope } from '../../../domain/scope/Scope.js';
 import type { WorkspaceHash } from '../../../domain/scope/WorkspaceHash.js';
 import { createSession } from '../../../domain/session/Session.js';
@@ -239,11 +240,7 @@ export class FileSystemSessionStore implements SessionStore {
       }
 
       for (var dirName of dirNames) {
-        var { hash, slug } = parseScopeDirName(dirName);
-        var scope: Scope = scopeType === 'project'
-          ? projectScope(hash as ProjectHash, slug)
-          : workspaceScope(hash as WorkspaceHash, [], slug);
-
+        var scope = await this.scopeFromDir(scopeType, dirName);
         var sessions = await this.findRecent(scope, Number.MAX_SAFE_INTEGER);
         allSessions.push(...sessions);
       }
@@ -431,35 +428,100 @@ export class FileSystemSessionStore implements SessionStore {
     return legacyExists ? scope.hash : preferred;
   }
 
-  private async ensureMeta(session: Session, dirName: string): Promise<void> {
-    var metaPath = scopeMetaPath(this.home, session.scope.type, dirName);
+  async findByPathHint(absolutePath: string, slug: string): Promise<ProjectIdentity | null> {
+    var projects = await this.readProjectIdentities();
+    var normalizedPath = absolutePath.replace(/\/$/, '');
+    var pathHash = projectHashFromPath(normalizedPath);
+
+    var bySource = projects.filter(
+      (project) => project.sourceHint === normalizedPath || project.sourceHint === absolutePath,
+    );
+    if (bySource.length === 1) {
+      return bySource[0]!;
+    }
+
+    var bySlug = slug
+      ? projects.filter((project) => project.slug === slug && project.hash !== 'unscoped')
+      : [];
+    if (bySlug.length === 1) {
+      return bySlug[0]!;
+    }
+    if (bySlug.length > 1) {
+      var remoteSourced = bySlug.filter((project) => isPlausibleGitRemote(project.sourceHint));
+      if (remoteSourced.length === 1) {
+        return remoteSourced[0]!;
+      }
+      var notPathHash = bySlug.filter((project) => project.hash !== pathHash);
+      if (notPathHash.length === 1) {
+        return notPathHash[0]!;
+      }
+    }
+
+    return null;
+  }
+
+  private async readProjectIdentities(): Promise<readonly ProjectIdentity[]> {
+    var baseDir = projectsDir(this.home);
     try {
-      await stat(metaPath);
+      var dirNames = await readdir(baseDir);
     } catch {
-      var created = session.createdAt.toISOString().split('T')[0];
-      var scope = session.scope;
-      var meta = [
-        `# ${scope.type}`,
-        '',
-        `- Hash: ${scope.hash}`,
-        `- Slug: ${scope.slug || '(desconhecido)'}`,
-        `- Source: ${describeSourceHint(scope)}`,
-        `- Created: ${created}`,
-        '',
-      ].join('\n');
-      await writeFileAtomically(metaPath, meta);
+      return [];
+    }
+
+    var identities: ProjectIdentity[] = [];
+    for (var dirName of dirNames) {
+      var scope = await this.scopeFromDir('project', dirName);
+      if (scope.type !== 'project' || (!scope.slug && !scope.sourceHint)) {
+        continue;
+      }
+      identities.push({
+        hash: scope.hash,
+        slug: scope.slug,
+        sourceHint: scope.sourceHint ?? '',
+        fromRemote: isPlausibleGitRemote(scope.sourceHint ?? ''),
+      });
+    }
+    return identities;
+  }
+
+  private async scopeFromDir(scopeType: 'project' | 'workspace', dirName: string): Promise<Scope> {
+    var fromDir = parseScopeDirName(dirName);
+    var meta = await this.readMeta(scopeType, dirName);
+    var slug = meta?.slug || fromDir.slug;
+    var sourceHint = meta?.source || undefined;
+    if (scopeType === 'project') {
+      return projectScope(fromDir.hash as ProjectHash, slug, sourceHint);
+    }
+    return workspaceScope(fromDir.hash as WorkspaceHash, [], slug);
+  }
+
+  private async readMeta(
+    scopeType: 'project' | 'workspace',
+    dirName: string,
+  ): Promise<ReturnType<typeof parseProjectMeta> | null> {
+    try {
+      var raw = await readFile(scopeMetaPath(this.home, scopeType, dirName), 'utf-8');
+      return parseProjectMeta(raw);
+    } catch {
+      return null;
     }
   }
-}
 
-function describeSourceHint(scope: Scope): string {
-  if (isUnscoped(scope)) {
-    return '(sem projeto — nenhuma raiz de workspace informada)';
+  private async ensureMeta(session: Session, dirName: string): Promise<void> {
+    var metaPath = scopeMetaPath(this.home, session.scope.type, dirName);
+    var created = session.createdAt.toISOString().split('T')[0]!;
+    try {
+      var raw = await readFile(metaPath, 'utf-8');
+      var parsed = parseProjectMeta(raw);
+      if (!isProjectMetaIncomplete(parsed, session.scope)) {
+        return;
+      }
+      created = parsed.created || created;
+    } catch {
+      // meta.md is missing — write a full file below
+    }
+    await writeFileAtomically(metaPath, serializeProjectMeta(session.scope, created));
   }
-  if (scope.type === 'project') {
-    return scope.sourceHint ?? '(desconhecido)';
-  }
-  return `workspace multi-root (${scope.projectHashes.length} projeto(s))`;
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -469,16 +531,6 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-const scopeDirNamePattern = new RegExp(`^(?:(.+)-)?([0-9a-f]{16}|${UNSCOPED_PROJECT_HASH})$`);
-
-function parseScopeDirName(dirName: string): { hash: string; slug: string } {
-  var match = scopeDirNamePattern.exec(dirName);
-  if (!match) {
-    return { hash: dirName, slug: '' };
-  }
-  return { hash: match[2]!, slug: match[1] ?? '' };
 }
 
 function parseTrashedScopeDirName(dirName: string): { hash: string; slug: string } {

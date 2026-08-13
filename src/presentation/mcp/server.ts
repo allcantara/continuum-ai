@@ -19,6 +19,7 @@ import {
   saveSchema,
   stashSchema,
   syncInputSchema,
+  ROOTS_TOOL_HINT,
   type ScopeResolutionOptions,
 } from './tools/handlers.js';
 import { isErrorResponse } from './tools/ResponseFormatting.js';
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'continuum_save',
     {
-      description: 'Save a cumulative session snapshot of the current work context',
+      description: 'Save a cumulative session snapshot of the current work context.' + ROOTS_TOOL_HINT,
       inputSchema: saveSchema.shape,
     },
     async (args) => {
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'continuum_load',
     {
-      description: 'Load the most recent session for the current project or workspace',
+      description: 'Load the most recent session for the current project or workspace.' + ROOTS_TOOL_HINT,
       inputSchema: loadSchema.shape,
     },
     async (args) => {
@@ -133,7 +134,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'continuum_recap',
     {
-      description: 'Load the last N sessions for deeper history (default: 5)',
+      description: 'Load the last N sessions for deeper history (default: 5).' + ROOTS_TOOL_HINT,
       inputSchema: recapSchema.shape,
     },
     async (args) => {
@@ -145,7 +146,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'continuum_list',
     {
-      description: 'Search and list sessions via the index',
+      description: 'Search and list sessions via the index.' + ROOTS_TOOL_HINT,
       inputSchema: listSchema.shape,
     },
     async (args) => {
@@ -166,7 +167,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'continuum_stash',
     {
-      description: 'Move a session or entire project/workspace to trash',
+      description: 'Move a session or entire project/workspace to trash.' + ROOTS_TOOL_HINT,
       inputSchema: stashSchema.shape,
     },
     async (args) => {
@@ -184,7 +185,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'continuum_restore',
     {
-      description: 'Restore a session or entire project/workspace from trash',
+      description: 'Restore a session or entire project/workspace from trash.' + ROOTS_TOOL_HINT,
       inputSchema: restoreInputSchema.shape,
     },
     async (args) => {

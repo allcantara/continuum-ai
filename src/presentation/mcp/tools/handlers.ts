@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Container } from '../../../container.js';
 import { isUnscoped } from '../../../domain/scope/Scope.js';
 import type { Scope } from '../../../domain/scope/Scope.js';
+import { isPlausibleGitRemote } from '../../../domain/scope/ProjectHash.js';
 import { sessionIdFrom } from '../../../domain/session/SessionId.js';
 import type { ListSessionEntry } from '../../../application/list/ListSessionsUseCase.js';
 import type { ListTrashEntry } from '../../../application/trash/ListTrashUseCase.js';
@@ -56,14 +57,43 @@ const CACHED_SCOPE_WARNING = formatWarning(
   'escopo reaproveitado da chamada anterior desta sessão MCP. Informe roots explicitamente se o workspace mudou.',
 );
 
+const PATH_BASED_WARNING = formatWarning(
+  'o remoto git não pôde ser lido; a identidade usou o caminho da pasta e pode não coincidir com sessões ' +
+  'salvas quando o remoto estava disponível. Se a lista vier vazia, passe roots e tente all_projects: true.',
+);
+
 const TRUNCATION_WARNING = formatWarning(
   'conteúdo truncado para caber no contexto do modelo. O arquivo completo permanece salvo em disco.',
 );
+
+const EMPTY_UNSCOPED =
+  'No sessions found in the shared "sem-projeto" bucket. Sessions for an open project are stored under ' +
+  'that project — pass roots with the workspace absolute path, or call again with all_projects: true.';
+
+function isPathBasedScope(scope: Scope): boolean {
+  if (scope.type !== 'project' || isUnscoped(scope) || !scope.sourceHint) {
+    return false;
+  }
+  if (isPlausibleGitRemote(scope.sourceHint)) {
+    return false;
+  }
+  return scope.sourceHint.startsWith('/') || /^[A-Za-z]:[\\/]/.test(scope.sourceHint);
+}
+
+function emptySessionsMessage(scope: Scope | undefined, fallback: string): string {
+  if (scope && isUnscoped(scope)) {
+    return EMPTY_UNSCOPED;
+  }
+  return fallback;
+}
 
 function withScopeWarnings(message: string, scope: Scope, options?: ScopeResolutionOptions): string {
   var warnings: string[] = [];
   if (isUnscoped(scope)) {
     warnings.push(UNSCOPED_WARNING);
+  }
+  if (isPathBasedScope(scope)) {
+    warnings.push(PATH_BASED_WARNING);
   }
   if (options?.fromProcessCache) {
     warnings.push(CACHED_SCOPE_WARNING);
@@ -71,15 +101,12 @@ function withScopeWarnings(message: string, scope: Scope, options?: ScopeResolut
   return appendWarnings(message, warnings);
 }
 
-const ROOTS_DESCRIPTION =
-  'Absolute path(s) of the current workspace root(s). IMPORTANT: pass this explicitly using your own ' +
-  'knowledge of the open workspace — many MCP clients (including Cursor, due to a known bug) advertise ' +
-  'the "roots" capability but do not actually implement it, so automatic discovery cannot be relied on. ' +
-  'Omit only when no workspace/folder is open; the session then goes to a shared "sem-projeto" bucket.';
+export const ROOTS_TOOL_HINT =
+  ' Always pass `roots` with the absolute path of the open workspace. Cursor does not implement MCP ' +
+  'roots/list; omitting roots uses the shared "sem-projeto" bucket instead of this project.';
 
-function isPlausibleGitRemote(value: string): boolean {
-  return /^(?:https?:\/\/|git@|ssh:\/\/)/.test(value.trim());
-}
+export const ROOTS_DESCRIPTION =
+  'Absolute workspace path(s). REQUIRED in Cursor (roots/list is broken). Omit only when no folder is open — then the shared sem-projeto bucket is used.';
 
 type ParsedSessionId =
   | { readonly ok: true; readonly id: ReturnType<typeof sessionIdFrom> }
@@ -167,7 +194,7 @@ export async function handleLoad(
   var result = await container.loadSession.execute({ scope });
 
   if (!result.ok) {
-    return withScopeWarnings(`Error: ${result.reason}`, scope, scopeOptions);
+    return withScopeWarnings(`Error: ${emptySessionsMessage(scope, result.reason)}`, scope, scopeOptions);
   }
 
   var body = [
@@ -201,7 +228,7 @@ export async function handleRecap(
   var result = await container.recap.execute(recapInput);
 
   if (!result.ok) {
-    return withScopeWarnings(`Error: ${result.reason}`, scope, scopeOptions);
+    return withScopeWarnings(`Error: ${emptySessionsMessage(scope, result.reason)}`, scope, scopeOptions);
   }
 
   var body = result.value.sessions
@@ -245,7 +272,9 @@ export async function handleList(
   }
 
   if (result.value.sessions.length === 0) {
-    return scope ? withScopeWarnings('No sessions found.', scope, scopeOptions) : 'No sessions found.';
+    return scope
+      ? withScopeWarnings(emptySessionsMessage(scope, 'No sessions found.'), scope, scopeOptions)
+      : 'No sessions found.';
   }
 
   return result.value.sessions

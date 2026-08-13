@@ -124,4 +124,15 @@ describe('installContinuumCursorCommands', () => {
       ]),
     );
   });
+
+  it('instructs managed slash commands to pass roots with the workspace path', async () => {
+    await installContinuumCursorCommands();
+    var commandsDir = join(tempHome, '.cursor', 'commands');
+
+    for (var fileName of ['continuum-save.md', 'continuum-load.md', 'continuum-recap.md', 'continuum-list.md']) {
+      var content = await readFile(join(commandsDir, fileName), 'utf-8');
+      expect(content).toContain('roots');
+      expect(content).toContain('sem-projeto');
+    }
+  });
 });

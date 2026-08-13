@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -8,7 +8,7 @@ import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
 import { createSession } from '../../src/domain/session/Session.js';
 import { sessionContentFrom } from '../../src/domain/session/SessionContent.js';
 import { sessionIdFrom } from '../../src/domain/session/SessionId.js';
-import { sessionSummaryFrom } from '../../src/domain/session/SessionSummary.js';
+import { FileSystemSessionStore } from '../../src/infrastructure/persistence/filesystem/FileSystemSessionStore.js';
 
 describe('FileSystemSessionStore integration', () => {
   var home: string;
@@ -260,5 +260,59 @@ describe('FileSystemSessionStore integration', () => {
     var unscopedSessions = allSessions.filter((s) => isUnscoped(s.scope));
     expect(unscopedSessions).toHaveLength(1);
     expect(unscopedSessions[0]!.scope.hash).toBe(noScope.hash);
+  });
+
+  it('updates a legacy meta.md that is missing slug and source', async () => {
+    var slugScope = projectScope(
+      projectHashFromPath('/test/legacy-meta-project'),
+      'legacy-meta-project',
+      'https://github.com/user/legacy-meta-project',
+    );
+    var legacyDir = join(home, 'projects', slugScope.hash);
+    await mkdir(join(legacyDir, 'sessions'), { recursive: true });
+    await writeFile(
+      join(legacyDir, 'meta.md'),
+      `# project\n\n- Hash: ${slugScope.hash}\n- Created: 2026-08-01\n`,
+      'utf-8',
+    );
+
+    await container.saveSession.execute({ scope: slugScope, content: 'Backfill meta.' });
+
+    var metaContent = await readFile(join(legacyDir, 'meta.md'), 'utf-8');
+    expect(metaContent).toContain('Slug: legacy-meta-project');
+    expect(metaContent).toContain('Source: https://github.com/user/legacy-meta-project');
+    expect(metaContent).toContain('Created: 2026-08-01');
+  });
+
+  it('reuses a stored project by slug when looking up a path hint', async () => {
+    var stored = projectScope(
+      projectHashFromPath('/stored-as-remote'),
+      'cpc-refinancing-app-bff',
+      'https://gitlab.example/cpc-refinancing-app-bff',
+    );
+    await container.saveSession.execute({ scope: stored, content: 'Original remote-hash session.' });
+
+    var store = new FileSystemSessionStore(home);
+    var found = await store.findByPathHint(
+      '/Users/dev/git/cpc-refinancing-app-bff',
+      'cpc-refinancing-app-bff',
+    );
+    expect(found?.hash).toBe(stored.hash);
+    expect(found?.fromRemote).toBe(true);
+  });
+
+  it('rebuilds session scopes from meta slug for a hash-only folder', async () => {
+    var hash = projectHashFromPath('/test/hash-only-slug');
+    var dir = join(home, 'projects', hash);
+    await mkdir(join(dir, 'sessions'), { recursive: true });
+    await writeFile(
+      join(dir, 'meta.md'),
+      `# project\n\n- Hash: ${hash}\n- Slug: cpc-refinancing-app-bff\n- Source: https://gitlab.example/cpc-refinancing-app-bff\n- Created: 2026-08-12\n`,
+      'utf-8',
+    );
+    await writeFile(join(dir, 'sessions', '2026-08-12-1603.md'), '<!-- continuum:summary: Hello -->\nBody\n', 'utf-8');
+
+    var all = await container.sessionStore.listAllSessions();
+    expect(all[0]?.scope.slug).toBe('cpc-refinancing-app-bff');
   });
 });

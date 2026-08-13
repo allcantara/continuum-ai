@@ -50,3 +50,7 @@ export function projectSlugFromPath(absolutePath: string): string {
   var lastSegment = normalized.split('/').pop() ?? normalized;
   return slugify(lastSegment);
 }
+
+export function isPlausibleGitRemote(value: string): boolean {
+  return /^(?:https?:\/\/|git@|ssh:\/\/)/.test(value.trim());
+}
