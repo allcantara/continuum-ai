@@ -21,13 +21,6 @@ function gitRemoteReaderStub(
   };
 }
 
-const noopScopeRegistry: ScopeRegistry = {
-  findByAliases: vi.fn().mockResolvedValue(null),
-  register: vi.fn(),
-  countScopes: vi.fn().mockResolvedValue(0),
-  isAvailable: () => false,
-};
-
 describe('ScopeResolutionService', () => {
   it('resolves single root as project scope', async () => {
     var gitRemoteReader = gitRemoteReaderStub({
