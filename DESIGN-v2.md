@@ -94,7 +94,7 @@ $CONTINUUM_HOME/
 │   └── transcripts/
 ├── knowledge/                      # Camada 3 (novo) — cross-project
 │   ├── auth-patterns.md
-│   └── siape-decisions.md
+│   └── auth-decisions.md
 ├── .trash/                         # estendido para transcripts e knowledge
 └── .gitignore                      # transcripts/ ignorado por padrão
 ```
@@ -151,7 +151,7 @@ Mantém o formato atual com extensões opcionais no marcador HTML:
 ```markdown
 <!-- continuum:knowledge:slug: auth-patterns -->
 <!-- continuum:summary: Padrões de autenticação adotados -->
-<!-- continuum:origin-scope: projects/portabilidade-abc123 -->
+<!-- continuum:origin-scope: projects/example-app-abc123 -->
 ## Contexto
 ## Decisão
 ## Quando aplicar
@@ -304,7 +304,7 @@ Configuração em hooks do projeto ou global:
 |---|---|---|
 | `projects/*/sessions/` | Sim | Retomar trabalho cross-machine |
 | `knowledge/` | Sim | Reuso cross-project |
-| `projects/*/transcripts/` | **Não** | Volume, LGPD, dados sensíveis |
+| `projects/*/transcripts/` | **Não** | Volume, privacidade, dados sensíveis |
 | `index.sqlite` | Não (como v1) | Derivado |
 
 `continuum_sync enable` atualiza `.gitignore` para incluir `**/transcripts/` quando sync é habilitado.
@@ -315,7 +315,7 @@ Usuário pode optar por sync de transcripts com aviso explícito de risco:
 continuum sync enable --include-transcripts   # exige confirmação interativa
 ```
 
-## 9. Segurança e LGPD
+## 9. Segurança e privacidade
 
 1. **SecretScanner** roda em `capture`, `ingest` e `save` — bloqueia ou avisa antes de gravar.
 2. **Captura automática** desabilitada por padrão; habilitar exige config explícita.

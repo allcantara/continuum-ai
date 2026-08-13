@@ -47,6 +47,6 @@ describe('ProjectHash', () => {
   it('recognizes plausible git remotes and rejects filesystem paths', () => {
     expect(isPlausibleGitRemote('git@github.com:user/repo.git')).toBe(true);
     expect(isPlausibleGitRemote('https://github.com/user/repo')).toBe(true);
-    expect(isPlausibleGitRemote('/Users/dev/git/cpc-refinancing-app-bff')).toBe(false);
+    expect(isPlausibleGitRemote('/Users/dev/git/example-api')).toBe(false);
   });
 });

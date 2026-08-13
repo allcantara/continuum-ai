@@ -51,7 +51,7 @@ describe('IndexReconciliationService', () => {
     var sessionStore = {
       countAllSessions: vi.fn().mockResolvedValue(1),
       listAllSessions: vi.fn().mockResolvedValue([
-        { id: 'a', scope: { hash: 'h1', slug: 'cpc-refinancing-app-bff' }, status: 'active' },
+        { id: 'a', scope: { hash: 'h1', slug: 'example-api' }, status: 'active' },
       ]),
     } as unknown as SessionStore;
 

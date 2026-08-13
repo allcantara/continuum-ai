@@ -14,9 +14,9 @@ describe('ProjectMeta', () => {
   });
 
   it('parses a slug-hash folder name', () => {
-    expect(parseScopeDirName('cpc-refinancing-app-bff-db3e1cefe1b82864')).toEqual({
+    expect(parseScopeDirName('example-api-db3e1cefe1b82864')).toEqual({
       hash: 'db3e1cefe1b82864',
-      slug: 'cpc-refinancing-app-bff',
+      slug: 'example-api',
     });
   });
 

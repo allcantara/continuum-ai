@@ -188,7 +188,7 @@ Este design foi comparado com um projeto de referência mais robusto ("ai-memory
 | `save` | Encerrando o trabalho do dia | "salva o contexto antes de eu fechar" | `continuum save -m "..."` |
 | `load` | Retomando no dia seguinte | "retoma de onde parei" | `continuum load` |
 | `recap` | Voltando a um projeto parado há meses | "me dá um apanhado geral de tudo que fizemos aqui" | `continuum recap --last 10` |
-| `list` | Buscando se já resolveu algo parecido | "já mexi com autenticação SIAPE em outro projeto?" | `continuum list --query "autenticação" --all-projects` |
+| `list` | Buscando se já resolveu algo parecido | "já resolvi algo parecido com autenticação em outro projeto?" | `continuum list --query "autenticação" --all-projects` |
 | `stash` | Sessão de teste salva por engano | "apaga essa última sessão, foi só um teste" | `continuum stash --session <id>` |
 | `trash` | Antes de restaurar algo | "o que eu já apaguei desse projeto?" | `continuum trash` |
 | `restore` | Recuperando de uma exclusão por engano | "restaura aquela sessão que apaguei ontem" | `continuum restore <id>` |

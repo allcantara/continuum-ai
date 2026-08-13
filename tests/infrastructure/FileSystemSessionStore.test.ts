@@ -298,12 +298,12 @@ describe('FileSystemSessionStore integration', () => {
     await mkdir(join(dir, 'sessions'), { recursive: true });
     await writeFile(
       join(dir, 'meta.md'),
-      `# project\n\n- Hash: ${hash}\n- Slug: cpc-refinancing-app-bff\n- Source: https://gitlab.example/cpc-refinancing-app-bff\n- Created: 2026-08-12\n`,
+      `# project\n\n- Hash: ${hash}\n- Slug: example-api\n- Source: https://github.com/example/example-api\n- Created: 2026-08-12\n`,
       'utf-8',
     );
     await writeFile(join(dir, 'sessions', '2026-08-12-1603.md'), '<!-- continuum:summary: Hello -->\nBody\n', 'utf-8');
 
     var all = await container.sessionStore.listAllSessions();
-    expect(all[0]?.scope.slug).toBe('cpc-refinancing-app-bff');
+    expect(all[0]?.scope.slug).toBe('example-api');
   });
 });

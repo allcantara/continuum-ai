@@ -189,7 +189,7 @@ These work in any MCP client. In Cursor you can type the same ideas or use the m
 | Close the day without losing context | "Save this session in Continuum before I close." |
 | Start a new chat on the same project | "Load the last Continuum session for this project and continue from there." |
 | Return to a project that sat idle | "Give me a recap of the last 10 Continuum sessions here." |
-| Reuse a decision from another repo | "Search Continuum across all projects for SIAPE authentication." |
+| Reuse a decision from another repo | "Search Continuum across all projects for JWT authentication patterns." |
 | Discard a test snapshot | "Stash the last Continuum session — it was only a test." |
 | Undo a stash | "What is in the Continuum trash?" then "Restore session `<id>`." |
 
@@ -221,7 +221,7 @@ continuum recap --last 10         # last 10 sessions (default: 5)
 ```bash
 continuum list                    # sessions for the current project
 continuum list -q "authentication"
-continuum list --all-projects -q "SIAPE"
+continuum list --all-projects -q "authentication"
 ```
 
 ### Stash and restore
