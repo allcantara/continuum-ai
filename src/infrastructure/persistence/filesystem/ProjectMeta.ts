@@ -14,14 +14,20 @@ export type ParsedProjectMeta = {
 
 const UNKNOWN = '(desconhecido)';
 
-const scopeDirNamePattern = new RegExp(`^(?:(.+)-)?([0-9a-f]{16}|${UNSCOPED_PROJECT_HASH})$`);
+const UUID_HASH = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const LEGACY_HASH = `[0-9a-f]{16}|${UNSCOPED_PROJECT_HASH}`;
 
 export function parseScopeDirName(dirName: string): ParsedScopeDirName {
-  var match = scopeDirNamePattern.exec(dirName);
-  if (!match) {
+  var uuidMatch = new RegExp(`^(.+)-(${UUID_HASH})$`, 'i').exec(dirName);
+  if (uuidMatch) {
+    return { hash: uuidMatch[2]!.toLowerCase(), slug: uuidMatch[1]! };
+  }
+
+  var legacyMatch = new RegExp(`^(?:(.+)-)?(${LEGACY_HASH})$`).exec(dirName);
+  if (!legacyMatch) {
     return { hash: dirName, slug: '' };
   }
-  return { hash: match[2]!, slug: match[1] ?? '' };
+  return { hash: legacyMatch[2]!, slug: legacyMatch[1] ?? '' };
 }
 
 export function parseProjectMeta(raw: string): ParsedProjectMeta {

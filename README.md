@@ -2,7 +2,7 @@
 
 Persist and reuse work context across chats, projects, and tools.
 
-Continuum is a local MCP server and CLI that saves cumulative session snapshots as markdown files, indexed by SQLite for fast search. It works with any MCP-compatible client (Cursor, Claude Code, etc.) and syncs across machines via optional git.
+Continuum is a **local** MCP server and CLI. It saves cumulative session snapshots as markdown files on this machine, indexed by SQLite for fast search. It works with any MCP-compatible client (Cursor, Claude Code, etc.). Sessions stay under `~/.continuum/` — there is no git remote, no `sync` command, and no sharing across machines.
 
 > **Development status:** Continuum is in active development (v0.1.x). APIs, CLI commands, and Cursor integration may change between releases. Pin a version in production workflows and review [GitHub Releases](https://github.com/allcantara/continuum-ai/releases) before updating.
 
@@ -13,7 +13,7 @@ Architecture and design decisions: [DESIGN.md](./DESIGN.md)
 ## Requirements
 
 - Node.js >= 24.15 (for built-in `node:sqlite` with FTS5)
-- Git (optional, for cross-machine sync)
+- Git (optional): used only to place `.continuum.local.json` at the repository root and to ignore it in this clone (`.git/info/exclude`)
 - [Cursor](https://cursor.com) (optional, for automatic IDE setup)
 
 ## Quick start (Cursor)
@@ -48,7 +48,7 @@ In Cursor, MCP tools must receive the **absolute path of the open workspace** vi
 
 | Situation | Where sessions are stored |
 |-----------|---------------------------|
-| `roots` passed (e.g. `/Users/you/dev/my-app`) | Under that project's folder |
+| `roots` passed (e.g. `/Users/you/dev/my-app`) | Under that project's folder, keyed by `.continuum.local.json` |
 | No `roots`, no prior scope in this MCP process | Shared **`sem-projeto`** bucket (all chats without a project) |
 | No `roots`, but a previous call in the same chat already resolved scope | Reuses the last scope (with a warning) |
 
@@ -59,6 +59,40 @@ The installed slash commands (`/continuum-save`, etc.) instruct the agent to pas
 ```
 
 The CLI does **not** need `roots` — it uses the terminal's current directory, which you control by `cd` into the project first.
+
+## How Continuum identifies a project
+
+Continuum does **not** infer identity from git remotes, `package.json`, or `pom.xml`.
+
+On the first **save** in a folder, it creates `.continuum.local.json` at the git root (or in the folder itself if there is no git). The file looks like:
+
+```json
+{
+  "id": "a3f1c8e2-9b44-4d1a-8f0e-2c7b91d4e5aa",
+  "folderName": "my-app"
+}
+```
+
+- `id` is a UUID generated once. It is the project identity for every scoped operation.
+- `folderName` is the directory name, used only as a readable label in lists and on disk (`~/.continuum/projects/<folderName>-<id>/`).
+
+If the folder is a git repository, Continuum also appends `.continuum.local.json` to `.git/info/exclude` (local to this clone, not committed). Git will not list or commit the file.
+
+Without git, Continuum does **not** walk into parent folders. The marker stays in the folder you saved from.
+
+These tools look for that file starting from the open folder up to the git root:
+
+| Tool | Needs the file | Creates it |
+|------|----------------|------------|
+| `save` | No — creates it on first save | Yes |
+| `list`, `load`, `recap`, `stash`, `restore` | Yes | No |
+| `trash` | No — lists every trashed item on this machine | No |
+
+If the file is missing, Continuum answers: *No Continuum project file (`.continuum.local.json`) in this folder. Save a session first to start tracking it.*
+
+A copy of the project **without** the file is treated as a new project. Copy the file along with the folder if you want the same identity on this machine.
+
+Sessions never leave this computer. There is no remote sync.
 
 ## Installation
 
@@ -76,6 +110,8 @@ continuum setup cursor --no-commands   # MCP only, skip slash commands
 ```
 
 Managed files (`continuum-ai-managed: true`) are updated on re-run. Custom command files without that marker are never overwritten.
+
+If you previously installed Continuum with git sync, you can delete the leftover slash commands `~/.cursor/commands/continuum-sync-status.md` and `continuum-sync-enable.md`. They are no longer installed.
 
 ### From source
 
@@ -102,12 +138,10 @@ After global install or `continuum setup cursor`, type `/` in **Agent** chat:
 
 | Command | MCP tool | Action |
 |---------|----------|--------|
-| `/continuum-save` | `continuum_save` | Save session snapshot |
+| `/continuum-save` | `continuum_save` | Save session snapshot (creates `.continuum.local.json` if needed) |
 | `/continuum-load` | `continuum_load` | Load latest session |
 | `/continuum-recap` | `continuum_recap` | Load recent session history |
 | `/continuum-list` | `continuum_list` | Search/list sessions |
-| `/continuum-sync-status` | `continuum_sync` | Show git sync status |
-| `/continuum-sync-enable` | `continuum_sync` | Enable git sync (needs remote URL) |
 | `/continuum-stash` | `continuum_stash` | Move session or project to trash |
 | `/continuum-trash` | `continuum_trash` | List trashed items |
 | `/continuum-restore` | `continuum_restore` | Restore session from trash |
@@ -156,7 +190,6 @@ These work in any MCP client. In Cursor you can type the same ideas or use the m
 | Start a new chat on the same project | "Load the last Continuum session for this project and continue from there." |
 | Return to a project that sat idle | "Give me a recap of the last 10 Continuum sessions here." |
 | Reuse a decision from another repo | "Search Continuum across all projects for SIAPE authentication." |
-| Sync to another machine | "Enable Continuum git sync with `git@github.com:me/continuum-memory.git`." |
 | Discard a test snapshot | "Stash the last Continuum session — it was only a test." |
 | Undo a stash | "What is in the Continuum trash?" then "Restore session `<id>`." |
 
@@ -175,6 +208,8 @@ continuum --help
 
 `continuum save` always opens `$EDITOR` (or `$VISUAL`, then `nano`) for the snapshot body. `-m` is only the short summary stored in the search index — not a substitute for the body.
 
+The first save in a folder creates `.continuum.local.json`. Later `load`, `recap`, `list`, `stash`, and `restore` reuse that file.
+
 ```bash
 continuum save -m "Chose JWT; next is refresh tokens"
 continuum load                    # print the latest snapshot for this directory
@@ -189,15 +224,12 @@ continuum list -q "authentication"
 continuum list --all-projects -q "SIAPE"
 ```
 
-### Sync, stash, restore
+### Stash and restore
 
 ```bash
-continuum sync enable git@github.com:me/continuum-memory.git
-continuum sync status
-
 continuum stash --session 2026-08-11-0915
 continuum stash --project         # entire project/workspace
-continuum trash
+continuum trash                   # all trashed items on this machine
 continuum restore 2026-08-11-0915
 ```
 
@@ -213,8 +245,6 @@ continuum save [-m "summary"]     # save current session context (opens editor)
 continuum load                    # load latest session
 continuum recap [--last N]        # load last N sessions (default: 5)
 continuum list [-q "search"] [--all-projects]
-continuum sync enable <remote-url>
-continuum sync status
 continuum stash --session <id> | --project
 continuum trash
 continuum restore <id>
@@ -232,7 +262,6 @@ MCP and CLI are interchangeable for the same job. Prefer MCP when you want the a
 | New chat, same project | "Load the last session and continue." | `continuum load` |
 | Project idle for months | "Recap the last 10 sessions." | `continuum recap --last 10` |
 | "Did we already solve this elsewhere?" | "Search Continuum across all projects for ..." | `continuum list --all-projects -q "..."` |
-| Second laptop | "Enable Continuum git sync with `<remote>`." | `continuum sync enable <remote>` |
 | Accidental test snapshot | "Stash that last session." | `continuum stash --session <id>` |
 | Undo a stash | "List Continuum trash, then restore `<id>`." | `continuum trash` then `continuum restore <id>` |
 
@@ -241,8 +270,7 @@ A typical loop:
 1. Open a new chat (or a new terminal) in the project.
 2. Load (`continuum_load` / `continuum load`) — or recap if you need more than the latest snapshot.
 3. Do the work.
-4. Save a full snapshot before you close the chat, switch tasks, or switch machines.
-5. If git sync is enabled, save still writes locally first; push is best-effort and will not fail the save.
+4. Save a full snapshot before you close the chat or switch tasks.
 
 Sessions are markdown files under `~/.continuum/projects/.../sessions/`. You can open them in any editor.
 
@@ -277,16 +305,17 @@ Pass `roots` on every tool call when the client does not reliably expose the ope
 
 ## Storage
 
-Default location: `~/.continuum/` (override with `CONTINUUM_HOME`).
+Default location: `~/.continuum/` (override with `CONTINUUM_HOME`). Everything stays on this machine.
 
-Markdown files under `sessions/` are the source of truth. `index.sqlite` is a derived search index, rebuilt automatically when out of sync.
+Markdown files under `sessions/` are the source of truth. `index.sqlite` is a derived search index, rebuilt automatically when it diverges from the files.
+
+Project identity lives in `.continuum.local.json` inside the working folder (see **How Continuum identifies a project**). That file is **not** stored under `~/.continuum/`.
 
 ```
 ~/.continuum/
 ├── index.sqlite                         # derived index (not source of truth)
-├── sync.json                            # present when git sync is enabled
-├── projects/<slug>-<hash>/
-│   ├── meta.md                          # slug, hash, git remote or path, created date
+├── projects/<folderName>-<uuid>/
+│   ├── meta.md                          # slug, uuid, source path, created date
 │   └── sessions/
 │       └── 2026-08-10-1430.md           # cumulative snapshot; never overwritten
 ├── workspaces/<slug>-<hash>/
@@ -298,11 +327,9 @@ Markdown files under `sessions/` are the source of truth. `index.sqlite` is a de
     └── sessions/<scope-hash>/...
 ```
 
-Legacy folders named only `<hash>` (without slug) are still supported — Continuum keeps using them instead of creating a duplicate.
+Legacy folders named with a 16-character hash (from older versions that used git remotes or paths) are still readable. New saves use the UUID from `.continuum.local.json`.
 
-Project identity prefers the normalized git remote URL; when no remote is available, it falls back to the absolute path and reuses a matching project already on disk (via `meta.md`).
-
-The latest session for `continuum load` is chosen by **session id** (timestamp in the filename), not file modification time — so git checkout or sync does not return the wrong session.
+The latest session for `continuum load` is chosen by **session id** (timestamp in the filename), not file modification time.
 
 ## Configuration
 
@@ -318,13 +345,12 @@ All scope-aware tools accept optional `roots: string[]` (absolute workspace path
 
 | Tool | Description |
 |------|-------------|
-| `continuum_save` | Save cumulative session snapshot |
-| `continuum_load` | Load latest session |
+| `continuum_save` | Save cumulative session snapshot; creates `.continuum.local.json` on first save |
+| `continuum_load` | Load latest session for this project |
 | `continuum_recap` | Load last N sessions |
 | `continuum_list` | Search/list sessions via index |
-| `continuum_sync` | Enable/configure git sync |
 | `continuum_stash` | Move session or project to trash |
-| `continuum_trash` | List trashed items |
+| `continuum_trash` | List trashed items (all projects on this machine) |
 | `continuum_restore` | Restore from trash |
 
 ## Development

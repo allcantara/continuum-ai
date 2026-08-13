@@ -1,8 +1,7 @@
 import { mkdir, readdir, readFile, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionStore } from '../../../domain/ports/SessionStore.js';
-import type { ProjectIdentity } from '../../../domain/ports/GitRemoteReader.js';
-import { isPlausibleGitRemote, projectHashFromPath, type ProjectHash } from '../../../domain/scope/ProjectHash.js';
+import type { ProjectHash } from '../../../domain/scope/ProjectHash.js';
 import { projectScope, scopeFolderName, workspaceScope } from '../../../domain/scope/Scope.js';
 import {
   isProjectMetaIncomplete,
@@ -422,57 +421,6 @@ export class FileSystemSessionStore implements SessionStore {
     var base = scope.type === 'project' ? projectsDir(this.home) : workspacesDir(this.home);
     var legacyExists = await pathExists(join(base, scope.hash));
     return legacyExists ? scope.hash : preferred;
-  }
-
-  async findByPathHint(absolutePath: string, slug: string): Promise<ProjectIdentity | null> {
-    var projects = await this.readProjectIdentities();
-    var normalizedPath = absolutePath.replace(/\/$/, '');
-    var pathHash = projectHashFromPath(normalizedPath);
-
-    var bySource = projects.filter(
-      (project) => project.sourceHint === normalizedPath || project.sourceHint === absolutePath,
-    );
-    if (bySource.length === 1) {
-      return bySource[0]!;
-    }
-
-    var bySlug = slug
-      ? projects.filter((project) => project.slug === slug && project.hash !== 'unscoped')
-      : [];
-    if (bySlug.length === 1) {
-      return bySlug[0]!;
-    }
-    if (bySlug.length > 1) {
-      var remoteSourced = bySlug.filter((project) => isPlausibleGitRemote(project.sourceHint));
-      if (remoteSourced.length === 1) {
-        return remoteSourced[0]!;
-      }
-      var notPathHash = bySlug.filter((project) => project.hash !== pathHash);
-      if (notPathHash.length === 1) {
-        return notPathHash[0]!;
-      }
-    }
-
-    return null;
-  }
-
-  private async readProjectIdentities(): Promise<readonly ProjectIdentity[]> {
-    var dirNames = await listSubdirectoryNames(projectsDir(this.home));
-
-    var identities: ProjectIdentity[] = [];
-    for (var dirName of dirNames) {
-      var scope = await this.scopeFromDir('project', dirName);
-      if (scope.type !== 'project' || (!scope.slug && !scope.sourceHint)) {
-        continue;
-      }
-      identities.push({
-        hash: scope.hash,
-        slug: scope.slug,
-        sourceHint: scope.sourceHint ?? '',
-        fromRemote: isPlausibleGitRemote(scope.sourceHint ?? ''),
-      });
-    }
-    return identities;
   }
 
   private async scopeFromDir(scopeType: 'project' | 'workspace', dirName: string): Promise<Scope> {

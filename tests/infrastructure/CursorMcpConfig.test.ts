@@ -109,15 +109,13 @@ describe('installContinuumCursorCommands', () => {
   it('installs slash commands for every Continuum MCP tool', async () => {
     var result = await installContinuumCursorCommands();
 
-    expect(result.installed).toHaveLength(9);
+    expect(result.installed).toHaveLength(7);
     expect(result.installed).toEqual(
       expect.arrayContaining([
         'continuum-save.md',
         'continuum-load.md',
         'continuum-recap.md',
         'continuum-list.md',
-        'continuum-sync-status.md',
-        'continuum-sync-enable.md',
         'continuum-stash.md',
         'continuum-trash.md',
         'continuum-restore.md',

@@ -1,10 +1,8 @@
-import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
 import type { Result } from '../Result.js';
 import { ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
-import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type ListSessionsInput = {
   readonly scope?: Scope;
@@ -28,12 +26,11 @@ export type ListSessionsOutput = {
 export class ListSessionsUseCase {
   constructor(
     private readonly sessionIndex: SessionIndex,
-    private readonly gitSync: GitSyncPort,
     private readonly indexReconciliation: IndexReconciliationService,
   ) {}
 
   async execute(input: ListSessionsInput): Promise<Result<ListSessionsOutput>> {
-    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
+    await this.indexReconciliation.reconcileIfNeeded();
 
     var searchQuery: {
       query?: string;

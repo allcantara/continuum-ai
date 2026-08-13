@@ -1,4 +1,3 @@
-import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
@@ -21,7 +20,6 @@ export type SaveSessionInput = {
 
 export type SaveSessionOutput = {
   readonly sessionId: string;
-  readonly syncWarning?: string;
   readonly securityWarning?: string;
 };
 
@@ -29,7 +27,6 @@ export class SaveSessionUseCase {
   constructor(
     private readonly sessionStore: SessionStore,
     private readonly sessionIndex: SessionIndex,
-    private readonly gitSync: GitSyncPort,
   ) {}
 
   async execute(input: SaveSessionInput): Promise<Result<SaveSessionOutput>> {
@@ -58,20 +55,7 @@ export class SaveSessionUseCase {
       content,
     );
 
-    var syncConfig = await this.gitSync.getConfiguration();
-    var syncWarning: string | undefined;
-
-    if (syncConfig.enabled) {
-      var syncResult = await this.gitSync.commitAndPush(`continuum: save session ${session.id}`);
-      if (!syncResult.success) {
-        syncWarning = syncResult.message;
-      }
-    }
-
     var output: SaveSessionOutput = { sessionId: session.id };
-    if (syncWarning !== undefined) {
-      output = { ...output, syncWarning };
-    }
     if (containsLikelySecret(input.content)) {
       output = { ...output, securityWarning: SECRET_SAVE_WARNING };
     }

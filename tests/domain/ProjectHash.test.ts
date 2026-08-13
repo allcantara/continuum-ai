@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeGitRemote,
-  isAbsoluteFilesystemPath,
   isPlausibleGitRemote,
   projectHashFromPath,
   projectHashFromRemote,
@@ -49,12 +48,5 @@ describe('ProjectHash', () => {
     expect(isPlausibleGitRemote('git@github.com:user/repo.git')).toBe(true);
     expect(isPlausibleGitRemote('https://github.com/user/repo')).toBe(true);
     expect(isPlausibleGitRemote('/Users/dev/git/cpc-refinancing-app-bff')).toBe(false);
-  });
-
-  it('treats only absolute filesystem paths as path-based identity input', () => {
-    expect(isAbsoluteFilesystemPath('/Users/dev/git/configuracoes-microsservicos-s3')).toBe(true);
-    expect(isAbsoluteFilesystemPath('https://github.com/org/repo')).toBe(false);
-    expect(isAbsoluteFilesystemPath('git@github.com:org/repo.git')).toBe(false);
-    expect(isAbsoluteFilesystemPath('relative/path')).toBe(false);
   });
 });

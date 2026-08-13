@@ -1,9 +1,7 @@
-import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { Result } from '../Result.js';
 import { ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
-import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type ListTrashEntry = {
   readonly sessionId: string;
@@ -21,12 +19,11 @@ export type ListTrashOutput = {
 export class ListTrashUseCase {
   constructor(
     private readonly sessionIndex: SessionIndex,
-    private readonly gitSync: GitSyncPort,
     private readonly indexReconciliation: IndexReconciliationService,
   ) {}
 
   async execute(): Promise<Result<ListTrashOutput>> {
-    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
+    await this.indexReconciliation.reconcileIfNeeded();
 
     var entries = await this.sessionIndex.search({ status: 'trashed' });
 

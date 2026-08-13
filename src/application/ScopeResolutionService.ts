@@ -1,44 +1,34 @@
+import type { ProjectMarkerStore } from '../domain/ports/ProjectMarkerStore.js';
+import type { ProjectHash } from '../domain/scope/ProjectHash.js';
 import { projectScope, unscopedProjectScope, workspaceScope } from '../domain/scope/Scope.js';
-import { workspaceHashFromProjectHashes, workspaceSlugFromProjectSlugs } from '../domain/scope/WorkspaceHash.js';
-import type { GitRemoteReader, ProjectIdentity } from '../domain/ports/GitRemoteReader.js';
-import type { ScopeRegistry } from '../domain/ports/ScopeRegistry.js';
 import type { Scope } from '../domain/scope/Scope.js';
+import { workspaceHashFromProjectHashes, workspaceSlugFromProjectSlugs } from '../domain/scope/WorkspaceHash.js';
 import type { Result } from './Result.js';
 import { err, ok } from './Result.js';
-import { buildScopeAliases } from './scope/ScopeAliasBuilder.js';
+
+export const NO_PROJECT_MARKER_REASON = 'NO_PROJECT_MARKER';
 
 export type ScopeResolutionInput = {
   readonly roots: readonly string[];
-};
-
-export type ProjectIdentityLookup = {
-  findByPathHint(absolutePath: string, slug: string): Promise<ProjectIdentity | null>;
-};
-
-const NOOP_IDENTITY_LOOKUP: ProjectIdentityLookup = {
-  findByPathHint: async () => null,
-};
-
-const NOOP_SCOPE_REGISTRY: ScopeRegistry = {
-  findByAliases: async () => null,
-  register: async () => {},
-  countScopes: async () => 0,
-  isAvailable: () => false,
+  readonly createIfMissing?: boolean;
 };
 
 export class ScopeResolutionService {
-  constructor(
-    private readonly gitRemoteReader: GitRemoteReader,
-    private readonly identityLookup: ProjectIdentityLookup = NOOP_IDENTITY_LOOKUP,
-    private readonly scopeRegistry: ScopeRegistry = NOOP_SCOPE_REGISTRY,
-  ) {}
+  constructor(private readonly markerStore: ProjectMarkerStore) {}
 
   async resolve(input: ScopeResolutionInput): Promise<Result<Scope>> {
     if (input.roots.length === 0) {
       return err('No project roots provided');
     }
 
-    var identities = await Promise.all(input.roots.map((root) => this.resolveIdentity(root)));
+    var identities: { hash: ProjectHash; slug: string; sourceHint: string }[] = [];
+    for (var root of input.roots) {
+      var identity = await this.resolveIdentity(root, input.createIfMissing === true);
+      if (!identity) {
+        return err(NO_PROJECT_MARKER_REASON);
+      }
+      identities.push(identity);
+    }
 
     if (identities.length === 1) {
       var only = identities[0]!;
@@ -51,56 +41,30 @@ export class ScopeResolutionService {
     return ok(workspaceScope(workspaceHash, hashes, slug));
   }
 
-  async resolveFromPath(absolutePath: string): Promise<Result<Scope>> {
-    var identity = await this.resolveIdentity(absolutePath);
-    return ok(projectScope(identity.hash, identity.slug, identity.sourceHint));
+  async resolveFromPath(absolutePath: string, createIfMissing: boolean = false): Promise<Result<Scope>> {
+    return this.resolve({ roots: [absolutePath], createIfMissing });
   }
 
-  /** Stable "no project open" bucket — used only for MCP calls with no resolvable path. */
   resolveUnscoped(): Scope {
     return unscopedProjectScope();
   }
 
-  private async resolveIdentity(absolutePath: string): Promise<ProjectIdentity> {
-    var gitRoot = await this.gitRemoteReader.findRepositoryRoot(absolutePath);
-    var identity = await this.gitRemoteReader.resolveProjectIdentity(absolutePath);
-    var aliases = buildScopeAliases(absolutePath, gitRoot, identity);
-
-    var registered = await this.scopeRegistry.findByAliases(aliases);
-    if (registered) {
-      var fromRegistry: ProjectIdentity = {
-        hash: registered.scopeHash as ProjectIdentity['hash'],
-        slug: registered.slug || identity.slug,
-        sourceHint: identity.sourceHint,
-        fromRemote: identity.fromRemote,
-      };
-      await this.persistAliases(absolutePath, gitRoot, fromRegistry);
-      return fromRegistry;
-    }
-
-    if (!identity.fromRemote) {
-      var existing = await this.identityLookup.findByPathHint(absolutePath, identity.slug);
-      if (existing) {
-        await this.persistAliases(absolutePath, gitRoot, existing);
-        return existing;
-      }
-    }
-
-    await this.persistAliases(absolutePath, gitRoot, identity);
-    return identity;
-  }
-
-  private async persistAliases(
+  private async resolveIdentity(
     absolutePath: string,
-    gitRoot: string | null,
-    identity: ProjectIdentity,
-  ): Promise<void> {
-    if (!this.scopeRegistry.isAvailable()) {
-      return;
+    createIfMissing: boolean,
+  ): Promise<{ hash: ProjectHash; slug: string; sourceHint: string } | null> {
+    var marker = createIfMissing
+      ? await this.markerStore.ensureFromPath(absolutePath)
+      : await this.markerStore.findFromPath(absolutePath);
+
+    if (!marker) {
+      return null;
     }
 
-    var scope = projectScope(identity.hash, identity.slug, identity.sourceHint);
-    var aliases = buildScopeAliases(absolutePath, gitRoot, identity);
-    await this.scopeRegistry.register(scope, aliases);
+    return {
+      hash: marker.id as ProjectHash,
+      slug: marker.folderName,
+      sourceHint: absolutePath,
+    };
   }
 }

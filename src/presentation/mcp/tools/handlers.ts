@@ -2,8 +2,8 @@ import { z } from 'zod';
 import type { Container } from '../../../container.js';
 import { isUnscoped } from '../../../domain/scope/Scope.js';
 import type { Scope } from '../../../domain/scope/Scope.js';
-import { isPlausibleGitRemote } from '../../../domain/scope/ProjectHash.js';
 import { sessionIdFrom } from '../../../domain/session/SessionId.js';
+import { NO_PROJECT_MARKER_REASON } from '../../../application/ScopeResolutionService.js';
 import type { ListSessionEntry } from '../../../application/list/ListSessionsUseCase.js';
 import type { ListTrashEntry } from '../../../application/trash/ListTrashUseCase.js';
 import type { RecapSessionEntry } from '../../../application/recap/RecapUseCase.js';
@@ -21,24 +21,34 @@ export type ScopeSource = 'cli' | 'mcp';
 
 export type ScopeResolutionOptions = {
   readonly fromProcessCache?: boolean;
+  readonly createIfMissing?: boolean;
 };
 
 export async function resolveScope(
   container: Container,
   roots: string[] | undefined,
   source: ScopeSource,
-): Promise<Scope> {
+  options?: ScopeResolutionOptions,
+): Promise<Scope | null> {
+  var createIfMissing = options?.createIfMissing === true;
+
   if (roots && roots.length > 0) {
-    var result = await container.scopeResolution.resolve({ roots });
+    var result = await container.scopeResolution.resolve({ roots, createIfMissing });
     if (!result.ok) {
+      if (result.reason === NO_PROJECT_MARKER_REASON) {
+        return null;
+      }
       throw new Error(result.reason);
     }
     return result.value;
   }
 
   if (source === 'cli') {
-    var pathResult = await container.scopeResolution.resolveFromPath(process.cwd());
+    var pathResult = await container.scopeResolution.resolveFromPath(process.cwd(), createIfMissing);
     if (!pathResult.ok) {
+      if (pathResult.reason === NO_PROJECT_MARKER_REASON) {
+        return null;
+      }
       throw new Error(pathResult.reason);
     }
     return pathResult.value;
@@ -57,28 +67,16 @@ const CACHED_SCOPE_WARNING = formatWarning(
   'escopo reaproveitado da chamada anterior desta sessão MCP. Informe roots explicitamente se o workspace mudou.',
 );
 
-const PATH_BASED_WARNING = formatWarning(
-  'o remoto git não pôde ser lido; a identidade usou o caminho da pasta e pode não coincidir com sessões ' +
-  'salvas quando o remoto estava disponível. Se a lista vier vazia, passe roots e tente all_projects: true.',
-);
-
-const TRUNCATION_WARNING = formatWarning(
-  'conteúdo truncado para caber no contexto do modelo. O arquivo completo permanece salvo em disco.',
-);
+const EMPTY_NO_MARKER =
+  'No Continuum project file (.continuum.local.json) in this folder. Save a session first to start tracking it.';
 
 const EMPTY_UNSCOPED =
   'No sessions found in the shared "sem-projeto" bucket. Sessions for an open project are stored under ' +
   'that project — pass roots with the workspace absolute path, or call again with all_projects: true.';
 
-function isPathBasedScope(scope: Scope): boolean {
-  if (scope.type !== 'project' || isUnscoped(scope) || !scope.sourceHint) {
-    return false;
-  }
-  if (isPlausibleGitRemote(scope.sourceHint)) {
-    return false;
-  }
-  return scope.sourceHint.startsWith('/') || /^[A-Za-z]:[\\/]/.test(scope.sourceHint);
-}
+const TRUNCATION_WARNING = formatWarning(
+  'conteúdo truncado para caber no contexto do modelo. O arquivo completo permanece salvo em disco.',
+);
 
 function emptySessionsMessage(scope: Scope | undefined, fallback: string): string {
   if (scope && isUnscoped(scope)) {
@@ -91,9 +89,6 @@ function withScopeWarnings(message: string, scope: Scope, options?: ScopeResolut
   var warnings: string[] = [];
   if (isUnscoped(scope)) {
     warnings.push(UNSCOPED_WARNING);
-  }
-  if (isPathBasedScope(scope)) {
-    warnings.push(PATH_BASED_WARNING);
   }
   if (options?.fromProcessCache) {
     warnings.push(CACHED_SCOPE_WARNING);
@@ -127,7 +122,7 @@ function formatScopeLabel(entry: { scopeType: string; scopeSlug: string; scopeHa
 }
 
 /**
- * `superRefine`-based schemas (e.g. `syncSchema`, `restoreSchema`) can't be passed as an MCP
+ * `superRefine`-based schemas (e.g. `restoreSchema`) can't be passed as an MCP
  * tool's `inputSchema` — the SDK needs a plain `ZodRawShape` (`.shape`), which a
  * `ZodEffects` wrapper doesn't expose — so the refined schema must be applied here, inside
  * the handler, for both the CLI and MCP call paths.
@@ -152,7 +147,10 @@ export async function handleSave(
   source: ScopeSource,
   scopeOptions?: ScopeResolutionOptions,
 ): Promise<string> {
-  var scope = await resolveScope(container, args.roots, source);
+  var scope = await resolveScope(container, args.roots, source, { ...scopeOptions, createIfMissing: true });
+  if (!scope) {
+    return `Error: ${EMPTY_NO_MARKER}`;
+  }
   var saveInput: { scope: Scope; content: string; summary?: string } = {
     scope,
     content: args.content,
@@ -167,9 +165,6 @@ export async function handleSave(
   }
 
   var warnings: string[] = [];
-  if (result.value.syncWarning) {
-    warnings.push(formatWarning(`sync: ${result.value.syncWarning}`));
-  }
   if (result.value.securityWarning) {
     warnings.push(result.value.securityWarning);
   }
@@ -190,7 +185,10 @@ export async function handleLoad(
   source: ScopeSource,
   scopeOptions?: ScopeResolutionOptions,
 ): Promise<string> {
-  var scope = await resolveScope(container, args.roots, source);
+  var scope = await resolveScope(container, args.roots, source, scopeOptions);
+  if (!scope) {
+    return EMPTY_NO_MARKER;
+  }
   var result = await container.loadSession.execute({ scope });
 
   if (!result.ok) {
@@ -220,7 +218,10 @@ export async function handleRecap(
   source: ScopeSource,
   scopeOptions?: ScopeResolutionOptions,
 ): Promise<string> {
-  var scope = await resolveScope(container, args.roots, source);
+  var scope = await resolveScope(container, args.roots, source, scopeOptions);
+  if (!scope) {
+    return EMPTY_NO_MARKER;
+  }
   var recapInput: { scope: Scope; last?: number } = { scope };
   if (args.last !== undefined) {
     recapInput.last = args.last;
@@ -254,9 +255,12 @@ export async function handleList(
   source: ScopeSource,
   scopeOptions?: ScopeResolutionOptions,
 ): Promise<string> {
-  var scope = args.all_projects ? undefined : await resolveScope(container, args.roots, source);
+  var scope = args.all_projects ? undefined : await resolveScope(container, args.roots, source, scopeOptions);
+  if (!args.all_projects && !scope) {
+    return EMPTY_NO_MARKER;
+  }
   var listInput: { scope?: Scope; query?: string; allProjects?: boolean } = {};
-  if (scope !== undefined) {
+  if (scope) {
     listInput.scope = scope;
   }
   if (args.query !== undefined) {
@@ -282,62 +286,6 @@ export async function handleList(
     .join('\n');
 }
 
-export const syncInputSchema = z.object({
-  action: z.enum(['enable', 'status']).describe('Sync action'),
-  remote_url: z.string().optional().describe('Git remote URL (required for enable)'),
-});
-
-export const syncSchema = syncInputSchema.superRefine((value, ctx) => {
-    if (value.action !== 'enable') {
-      return;
-    }
-
-    if (!value.remote_url) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'remote_url is required for enable action',
-        path: ['remote_url'],
-      });
-      return;
-    }
-
-    if (!isPlausibleGitRemote(value.remote_url)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'remote_url must be a plausible git remote URL (https://, git@, or ssh://)',
-        path: ['remote_url'],
-      });
-    }
-  });
-
-export async function handleSync(
-  container: Container,
-  args: z.infer<typeof syncInputSchema>,
-): Promise<string> {
-  var validation = parseOrError(syncSchema, args);
-  if (!validation.ok) {
-    return `Error: ${validation.error}`;
-  }
-  var validArgs = validation.value;
-
-  if (validArgs.action === 'status') {
-    var statusResult = await container.syncStatus.execute();
-    if (!statusResult.ok) {
-      return `Error: ${statusResult.reason}`;
-    }
-    var config = statusResult.value;
-    return config.enabled
-      ? `Sync enabled: ${config.remoteUrl}`
-      : 'Sync disabled';
-  }
-
-  var enableResult = await container.enableSync.execute({ remoteUrl: validArgs.remote_url! });
-  if (!enableResult.ok) {
-    return `Error: ${enableResult.reason}`;
-  }
-  return enableResult.value.message;
-}
-
 export const stashSchema = z.object({
   session_id: z.string().optional().describe('Session ID to stash'),
   project: z.boolean().optional().describe('Stash entire project/workspace'),
@@ -350,7 +298,10 @@ export async function handleStash(
   source: ScopeSource,
   scopeOptions?: ScopeResolutionOptions,
 ): Promise<string> {
-  var scope = await resolveScope(container, args.roots, source);
+  var scope = await resolveScope(container, args.roots, source, scopeOptions);
+  if (!scope) {
+    return EMPTY_NO_MARKER;
+  }
   var stashInput: { scope: Scope; sessionId?: ReturnType<typeof sessionIdFrom>; stashProject?: boolean } = { scope };
 
   if (args.session_id !== undefined) {
@@ -371,8 +322,7 @@ export async function handleStash(
     return withScopeWarnings(`Error: ${result.reason}`, scope, scopeOptions);
   }
 
-  var warnings = result.value.syncWarning ? [formatWarning(`sync: ${result.value.syncWarning}`)] : [];
-  return appendWarnings(withScopeWarnings(result.value.message, scope, scopeOptions), warnings);
+  return withScopeWarnings(result.value.message, scope, scopeOptions);
 }
 
 export async function handleTrash(container: Container): Promise<string> {
@@ -412,7 +362,10 @@ export async function handleRestore(
   source: ScopeSource,
   scopeOptions?: ScopeResolutionOptions,
 ): Promise<string> {
-  var scope = await resolveScope(container, args.roots, source);
+  var scope = await resolveScope(container, args.roots, source, scopeOptions);
+  if (!scope) {
+    return EMPTY_NO_MARKER;
+  }
   var validation = parseOrError(restoreSchema, args);
   if (!validation.ok) {
     return withScopeWarnings(`Error: ${validation.error}`, scope, scopeOptions);
@@ -442,6 +395,5 @@ export async function handleRestore(
     return withScopeWarnings(`Error: ${result.reason}`, scope, scopeOptions);
   }
 
-  var warnings = result.value.syncWarning ? [formatWarning(`sync: ${result.value.syncWarning}`)] : [];
-  return appendWarnings(withScopeWarnings(result.value.message, scope, scopeOptions), warnings);
+  return withScopeWarnings(result.value.message, scope, scopeOptions);
 }

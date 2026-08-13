@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { isAbsolute } from 'node:path';
 
 export type ProjectHash = string & { readonly __brand: 'ProjectHash' };
 
@@ -54,9 +53,4 @@ export function projectSlugFromPath(absolutePath: string): string {
 
 export function isPlausibleGitRemote(value: string): boolean {
   return /^(?:https?:\/\/|git@|ssh:\/\/)/.test(value.trim());
-}
-
-export function isAbsoluteFilesystemPath(value: string): boolean {
-  var trimmed = value.trim();
-  return isAbsolute(trimmed) && !isPlausibleGitRemote(trimmed);
 }

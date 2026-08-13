@@ -7,19 +7,14 @@ import { RestoreUseCase } from './application/restore/RestoreUseCase.js';
 import { SaveSessionUseCase } from './application/save/SaveSessionUseCase.js';
 import { ScopeResolutionService } from './application/ScopeResolutionService.js';
 import { StashUseCase } from './application/stash/StashUseCase.js';
-import { EnableSyncUseCase } from './application/sync/EnableSyncUseCase.js';
-import { SyncStatusUseCase } from './application/sync/SyncStatusUseCase.js';
 import { ListTrashUseCase } from './application/trash/ListTrashUseCase.js';
 import type { SessionIndex } from './domain/ports/SessionStore.js';
 import type { SessionStore } from './domain/ports/SessionStore.js';
 import { resolveContinuumHome } from './infrastructure/config/ContinuumHome.js';
-import { GitRemoteReader } from './infrastructure/git/GitRemoteReader.js';
-import { GitSyncAdapter } from './infrastructure/git/GitSyncAdapter.js';
 import { FileSystemSessionStore } from './infrastructure/persistence/filesystem/FileSystemSessionStore.js';
+import { FileSystemProjectMarkerStore } from './infrastructure/project/FileSystemProjectMarkerStore.js';
 import { PlainTextFallbackIndex } from './infrastructure/persistence/sqlite/PlainTextFallbackIndex.js';
-import { SqliteScopeRegistry } from './infrastructure/persistence/sqlite/SqliteScopeRegistry.js';
 import { SqliteSessionIndex } from './infrastructure/persistence/sqlite/SqliteSessionIndex.js';
-import { ScopeRegistryBootstrap } from './application/scope/ScopeRegistryBootstrap.js';
 
 export type Container = {
   readonly home: string;
@@ -31,8 +26,6 @@ export type Container = {
   readonly loadSession: LoadSessionUseCase;
   readonly recap: RecapUseCase;
   readonly listSessions: ListSessionsUseCase;
-  readonly enableSync: EnableSyncUseCase;
-  readonly syncStatus: SyncStatusUseCase;
   readonly stash: StashUseCase;
   readonly listTrash: ListTrashUseCase;
   readonly restore: RestoreUseCase;
@@ -47,13 +40,7 @@ export async function createContainer(home?: string): Promise<Container> {
   var indexReconciliation = new IndexReconciliationService(sessionStore, sessionIndex);
   await indexReconciliation.reconcileIfNeeded();
 
-  var gitRemoteReader = new GitRemoteReader();
-  var gitSync = new GitSyncAdapter(resolvedHome);
-  var scopeRegistry = new SqliteScopeRegistry(resolvedHome);
-  await scopeRegistry.initialize();
-  var scopeRegistryBootstrap = new ScopeRegistryBootstrap(scopeRegistry, sessionStore, gitRemoteReader);
-  await scopeRegistryBootstrap.bootstrapIfEmpty();
-  var scopeResolution = new ScopeResolutionService(gitRemoteReader, sessionStore, scopeRegistry);
+  var scopeResolution = new ScopeResolutionService(new FileSystemProjectMarkerStore());
 
   return {
     home: resolvedHome,
@@ -61,15 +48,13 @@ export async function createContainer(home?: string): Promise<Container> {
     sessionIndex,
     indexReconciliation,
     scopeResolution,
-    saveSession: new SaveSessionUseCase(sessionStore, sessionIndex, gitSync),
-    loadSession: new LoadSessionUseCase(sessionStore, gitSync, indexReconciliation),
-    recap: new RecapUseCase(sessionStore, gitSync, indexReconciliation),
-    listSessions: new ListSessionsUseCase(sessionIndex, gitSync, indexReconciliation),
-    enableSync: new EnableSyncUseCase(gitSync, indexReconciliation),
-    syncStatus: new SyncStatusUseCase(gitSync),
-    stash: new StashUseCase(sessionStore, sessionIndex, gitSync),
-    listTrash: new ListTrashUseCase(sessionIndex, gitSync, indexReconciliation),
-    restore: new RestoreUseCase(sessionStore, sessionIndex, gitSync),
+    saveSession: new SaveSessionUseCase(sessionStore, sessionIndex),
+    loadSession: new LoadSessionUseCase(sessionStore, indexReconciliation),
+    recap: new RecapUseCase(sessionStore, indexReconciliation),
+    listSessions: new ListSessionsUseCase(sessionIndex, indexReconciliation),
+    stash: new StashUseCase(sessionStore, sessionIndex),
+    listTrash: new ListTrashUseCase(sessionIndex, indexReconciliation),
+    restore: new RestoreUseCase(sessionStore, sessionIndex),
   };
 }
 

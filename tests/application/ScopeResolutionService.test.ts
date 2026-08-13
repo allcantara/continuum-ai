@@ -1,52 +1,73 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ScopeResolutionService } from '../../src/application/ScopeResolutionService.js';
-import { projectHashFromPath, projectSlugFromPath } from '../../src/domain/scope/ProjectHash.js';
+import { NO_PROJECT_MARKER_REASON, ScopeResolutionService } from '../../src/application/ScopeResolutionService.js';
+import type { ProjectMarkerStore } from '../../src/domain/ports/ProjectMarkerStore.js';
 import { isUnscoped } from '../../src/domain/scope/Scope.js';
-import type { GitRemoteReader, ProjectIdentity } from '../../src/domain/ports/GitRemoteReader.js';
-import type { ScopeRegistry } from '../../src/domain/ports/ScopeRegistry.js';
 
-function identityFromPath(path: string): ProjectIdentity {
-  return { hash: projectHashFromPath(path), slug: projectSlugFromPath(path), sourceHint: path, fromRemote: false };
-}
-
-function gitRemoteReaderStub(
-  overrides: Partial<GitRemoteReader> & {
-    resolveProjectIdentity?: GitRemoteReader['resolveProjectIdentity'];
-  } = {},
-): GitRemoteReader {
+function markerStoreStub(overrides: Partial<ProjectMarkerStore> = {}): ProjectMarkerStore {
   return {
-    readRemoteUrl: overrides.readRemoteUrl ?? vi.fn(),
-    resolveProjectIdentity: overrides.resolveProjectIdentity ?? vi.fn(),
-    findRepositoryRoot: overrides.findRepositoryRoot ?? vi.fn().mockResolvedValue(null),
+    findFromPath: overrides.findFromPath ?? vi.fn().mockResolvedValue(null),
+    ensureFromPath: overrides.ensureFromPath ?? vi.fn(),
   };
 }
 
 describe('ScopeResolutionService', () => {
-  it('resolves single root as project scope', async () => {
-    var gitRemoteReader = gitRemoteReaderStub({
-      resolveProjectIdentity: vi.fn().mockResolvedValue(identityFromPath('/project/a')),
+  it('resolves a single root from an existing marker', async () => {
+    var store = markerStoreStub({
+      findFromPath: vi.fn().mockResolvedValue({
+        id: 'a3f1c8e2-9b44-4d1a-8f0e-2c7b91d4e5aa',
+        folderName: 'my-app',
+      }),
     });
+    var service = new ScopeResolutionService(store);
 
-    var service = new ScopeResolutionService(gitRemoteReader);
-    var result = await service.resolve({ roots: ['/project/a'] });
+    var result = await service.resolve({ roots: ['/project/my-app'] });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.type).toBe('project');
-      expect(result.value.slug).toBe('a');
+      expect(result.value.hash).toBe('a3f1c8e2-9b44-4d1a-8f0e-2c7b91d4e5aa');
+      expect(result.value.slug).toBe('my-app');
+    }
+    expect(store.ensureFromPath).not.toHaveBeenCalled();
+  });
+
+  it('returns NO_PROJECT_MARKER when the file is missing and createIfMissing is false', async () => {
+    var service = new ScopeResolutionService(markerStoreStub());
+    var result = await service.resolve({ roots: ['/project/new'] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe(NO_PROJECT_MARKER_REASON);
     }
   });
 
-  it('resolves multiple roots as workspace scope', async () => {
-    var gitRemoteReader = gitRemoteReaderStub({
-      resolveProjectIdentity: vi
-        .fn()
-        .mockResolvedValueOnce(identityFromPath('/project/a'))
-        .mockResolvedValueOnce(identityFromPath('/project/b')),
+  it('creates a marker when createIfMissing is true', async () => {
+    var store = markerStoreStub({
+      ensureFromPath: vi.fn().mockResolvedValue({
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        folderName: 'new-app',
+      }),
     });
+    var service = new ScopeResolutionService(store);
 
-    var service = new ScopeResolutionService(gitRemoteReader);
-    var result = await service.resolve({ roots: ['/project/a', '/project/b'] });
+    var result = await service.resolve({ roots: ['/project/new-app'], createIfMissing: true });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.hash).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    }
+    expect(store.ensureFromPath).toHaveBeenCalledWith('/project/new-app');
+  });
+
+  it('resolves multiple roots as a workspace of marker ids', async () => {
+    var store = markerStoreStub({
+      findFromPath: vi
+        .fn()
+        .mockResolvedValueOnce({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', folderName: 'a' })
+        .mockResolvedValueOnce({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', folderName: 'b' }),
+    });
+    var service = new ScopeResolutionService(store);
+
+    var result = await service.resolve({ roots: ['/a', '/b'] });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -55,133 +76,8 @@ describe('ScopeResolutionService', () => {
     }
   });
 
-  it('returns error when no roots provided', async () => {
-    var gitRemoteReader = gitRemoteReaderStub();
-
-    var service = new ScopeResolutionService(gitRemoteReader);
-    var result = await service.resolve({ roots: [] });
-
-    expect(result.ok).toBe(false);
-  });
-
-  it('resolveFromPath uses the git remote hash when available, not just the path', async () => {
-    var remoteIdentity: ProjectIdentity = {
-      hash: projectHashFromPath('/would-be-different-if-path-based'),
-      slug: 'repo',
-      sourceHint: 'https://github.com/user/repo',
-      fromRemote: true,
-    };
-    var gitRemoteReader = gitRemoteReaderStub({
-      readRemoteUrl: vi.fn().mockResolvedValue('git@github.com:user/repo.git'),
-      resolveProjectIdentity: vi.fn().mockResolvedValue(remoteIdentity),
-    });
-
-    var service = new ScopeResolutionService(gitRemoteReader);
-    var result = await service.resolveFromPath('/some/local/checkout/of/repo');
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.hash).toBe(remoteIdentity.hash);
-    }
-    expect(gitRemoteReader.resolveProjectIdentity).toHaveBeenCalledWith('/some/local/checkout/of/repo');
-  });
-
-  it('resolveUnscoped returns a stable scope regardless of how many times it is called', () => {
-    var gitRemoteReader = gitRemoteReaderStub();
-
-    var service = new ScopeResolutionService(gitRemoteReader);
-    var first = service.resolveUnscoped();
-    var second = service.resolveUnscoped();
-
-    expect(first.hash).toBe(second.hash);
-    expect(isUnscoped(first)).toBe(true);
-  });
-
-  it('reuses an existing project identity when git remote is unavailable', async () => {
-    var pathIdentity = identityFromPath('/Users/dev/git/cpc-refinancing-app-bff');
-    var stored: ProjectIdentity = {
-      hash: projectHashFromPath('/stored-remote-hash-stand-in'),
-      slug: 'cpc-refinancing-app-bff',
-      sourceHint: 'https://gitlab.example/cpc-refinancing-app-bff',
-      fromRemote: true,
-    };
-    var findByPathHint = vi.fn().mockResolvedValue(stored);
-    var service = new ScopeResolutionService(
-      gitRemoteReaderStub({
-        resolveProjectIdentity: vi.fn().mockResolvedValue(pathIdentity),
-      }),
-      { findByPathHint },
-    );
-
-    var result = await service.resolve({ roots: ['/Users/dev/git/cpc-refinancing-app-bff'] });
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.hash).toBe(stored.hash);
-      expect(result.value.slug).toBe('cpc-refinancing-app-bff');
-    }
-    expect(findByPathHint).toHaveBeenCalledWith(
-      '/Users/dev/git/cpc-refinancing-app-bff',
-      'cpc-refinancing-app-bff',
-    );
-  });
-
-  it('does not look up existing projects when the git remote was resolved', async () => {
-    var remoteIdentity: ProjectIdentity = {
-      hash: projectHashFromPath('/remote'),
-      slug: 'repo',
-      sourceHint: 'https://github.com/user/repo',
-      fromRemote: true,
-    };
-    var findByPathHint = vi.fn();
-    var service = new ScopeResolutionService(
-      gitRemoteReaderStub({
-        resolveProjectIdentity: vi.fn().mockResolvedValue(remoteIdentity),
-      }),
-      { findByPathHint },
-    );
-
-    await service.resolve({ roots: ['/some/checkout'] });
-    expect(findByPathHint).not.toHaveBeenCalled();
-  });
-
-  it('reuses scope_hash from registry when cwd is a subdirectory of a registered git root', async () => {
-    var repoRoot = '/Users/dev/projects/continuum';
-    var subdir = '/Users/dev/projects/continuum/packages/api';
-    var storedHash = projectHashFromPath('/stored-canonical-hash');
-    var pathIdentity = identityFromPath(subdir);
-
-    var scopeRegistry: ScopeRegistry = {
-      findByAliases: vi.fn().mockResolvedValue({
-        scopeId: 'uuid-1',
-        scopeHash: storedHash,
-        scopeType: 'project',
-        slug: 'continuum',
-      }),
-      register: vi.fn(),
-      countScopes: vi.fn(),
-      isAvailable: () => true,
-    };
-
-    var service = new ScopeResolutionService(
-      gitRemoteReaderStub({
-        findRepositoryRoot: vi.fn().mockResolvedValue(repoRoot),
-        resolveProjectIdentity: vi.fn().mockResolvedValue(pathIdentity),
-      }),
-      NOOP_IDENTITY_LOOKUP,
-      scopeRegistry,
-    );
-
-    var result = await service.resolveFromPath(subdir);
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.hash).toBe(storedHash);
-    }
-    expect(scopeRegistry.findByAliases).toHaveBeenCalled();
+  it('resolveUnscoped returns the stable no-folder bucket', () => {
+    var service = new ScopeResolutionService(markerStoreStub());
+    expect(isUnscoped(service.resolveUnscoped())).toBe(true);
   });
 });
-
-const NOOP_IDENTITY_LOOKUP = {
-  findByPathHint: async () => null,
-};

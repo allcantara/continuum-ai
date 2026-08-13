@@ -9,7 +9,6 @@ import { createSession } from '../../src/domain/session/Session.js';
 import { sessionContentFrom } from '../../src/domain/session/SessionContent.js';
 import { sessionIdFrom } from '../../src/domain/session/SessionId.js';
 import { sessionSummaryFrom } from '../../src/domain/session/SessionSummary.js';
-import { FileSystemSessionStore } from '../../src/infrastructure/persistence/filesystem/FileSystemSessionStore.js';
 
 describe('FileSystemSessionStore integration', () => {
   var home: string;
@@ -291,23 +290,6 @@ describe('FileSystemSessionStore integration', () => {
     expect(metaContent).toContain('Slug: legacy-meta-project');
     expect(metaContent).toContain('Source: https://github.com/user/legacy-meta-project');
     expect(metaContent).toContain('Created: 2026-08-01');
-  });
-
-  it('reuses a stored project by slug when looking up a path hint', async () => {
-    var stored = projectScope(
-      projectHashFromPath('/stored-as-remote'),
-      'cpc-refinancing-app-bff',
-      'https://gitlab.example/cpc-refinancing-app-bff',
-    );
-    await container.saveSession.execute({ scope: stored, content: 'Original remote-hash session.' });
-
-    var store = new FileSystemSessionStore(home);
-    var found = await store.findByPathHint(
-      '/Users/dev/git/cpc-refinancing-app-bff',
-      'cpc-refinancing-app-bff',
-    );
-    expect(found?.hash).toBe(stored.hash);
-    expect(found?.fromRemote).toBe(true);
   });
 
   it('rebuilds session scopes from meta slug for a hash-only folder', async () => {

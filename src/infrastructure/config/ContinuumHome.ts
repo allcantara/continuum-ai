@@ -23,10 +23,6 @@ export function indexPath(home: string): string {
   return join(home, 'index.sqlite');
 }
 
-export function syncConfigPath(home: string): string {
-  return join(home, 'sync.json');
-}
-
 export function scopeSessionsDir(home: string, scopeType: 'project' | 'workspace', scopeDirName: string): string {
   var base = scopeType === 'project' ? projectsDir(home) : workspacesDir(home);
   return join(base, scopeDirName, 'sessions');

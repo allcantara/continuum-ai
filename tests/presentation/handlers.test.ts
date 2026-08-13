@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Container } from '../../src/container.js';
 import { isUnscoped, projectScope, unscopedProjectScope } from '../../src/domain/scope/Scope.js';
 import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
-import { handleList, handleLoad, handleRecap, handleRestore, handleStash, handleSync, resolveScope } from '../../src/presentation/mcp/tools/handlers.js';
+import { handleList, handleLoad, handleRecap, handleRestore, handleStash, resolveScope } from '../../src/presentation/mcp/tools/handlers.js';
 import { err, ok } from '../../src/application/Result.js';
 
 function containerWithScopeResolution(overrides: {
@@ -44,7 +44,7 @@ describe('resolveScope', () => {
 
     var scope = await resolveScope(container, ['/project/a'], 'mcp');
 
-    expect(resolve).toHaveBeenCalledWith({ roots: ['/project/a'] });
+    expect(resolve).toHaveBeenCalledWith({ roots: ['/project/a'], createIfMissing: false });
     expect(scope).toBe(resolvedScope);
   });
 
@@ -55,7 +55,7 @@ describe('resolveScope', () => {
 
     var scope = await resolveScope(container, undefined, 'cli');
 
-    expect(resolveFromPath).toHaveBeenCalledWith(process.cwd());
+    expect(resolveFromPath).toHaveBeenCalledWith(process.cwd(), false);
     expect(scope).toBe(resolvedScope);
   });
 
@@ -179,46 +179,5 @@ describe('handleRestore', () => {
     expect(response).toContain('Error:');
     expect(response).toContain('Either session_id or project must be provided');
     expect(restoreExecute).not.toHaveBeenCalled();
-  });
-});
-
-describe('handleSync', () => {
-  function containerWithEnableSync(overrides: { enableSyncExecute?: ReturnType<typeof vi.fn> }): Container {
-    return {
-      enableSync: { execute: overrides.enableSyncExecute ?? vi.fn() },
-      syncStatus: { execute: vi.fn() },
-    } as unknown as Container;
-  }
-
-  it('rejects an enable call missing remote_url instead of forwarding undefined to git', async () => {
-    var enableSyncExecute = vi.fn();
-    var container = containerWithEnableSync({ enableSyncExecute });
-
-    var response = await handleSync(container, { action: 'enable' });
-
-    expect(response).toContain('Error:');
-    expect(response).toContain('remote_url is required for enable action');
-    expect(enableSyncExecute).not.toHaveBeenCalled();
-  });
-
-  it('rejects an enable call whose remote_url is not a plausible git remote', async () => {
-    var enableSyncExecute = vi.fn();
-    var container = containerWithEnableSync({ enableSyncExecute });
-
-    var response = await handleSync(container, { action: 'enable', remote_url: 'not-a-url' });
-
-    expect(response).toContain('Error:');
-    expect(response).toContain('plausible git remote URL');
-    expect(enableSyncExecute).not.toHaveBeenCalled();
-  });
-
-  it('accepts a plausible remote_url for enable', async () => {
-    var enableSyncExecute = vi.fn().mockResolvedValue(ok({ message: 'Sync enabled with git@example.com:user/repo.git' }));
-    var container = containerWithEnableSync({ enableSyncExecute });
-
-    var response = await handleSync(container, { action: 'enable', remote_url: 'git@example.com:user/repo.git' });
-
-    expect(response).toContain('Sync enabled');
-    expect(enableSyncExecute).toHaveBeenCalledWith({ remoteUrl: 'git@example.com:user/repo.git' });
   });
 });

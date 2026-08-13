@@ -13,7 +13,6 @@ import {
   handleRestore,
   handleSave,
   handleStash,
-  handleSync,
   handleTrash,
 } from '../mcp/tools/handlers.js';
 
@@ -91,25 +90,6 @@ async function main(): Promise<void> {
         },
         'cli',
       );
-      console.log(text);
-    });
-
-  var syncCmd = program.command('sync').description('Git sync management');
-
-  syncCmd
-    .command('enable')
-    .description('Enable git sync with a remote URL')
-    .argument('<remote-url>', 'Git remote URL')
-    .action(async (remoteUrl: string) => {
-      var text = await handleSync(container, { action: 'enable', remote_url: remoteUrl });
-      console.log(text);
-    });
-
-  syncCmd
-    .command('status')
-    .description('Show sync status')
-    .action(async () => {
-      var text = await handleSync(container, { action: 'status' });
       console.log(text);
     });
 

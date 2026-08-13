@@ -1,4 +1,3 @@
-import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
 import { truncateForContext } from '../../domain/session/ContentTruncation.js';
@@ -6,7 +5,6 @@ import { resolveMaxRecapChars } from '../../infrastructure/config/Limits.js';
 import type { Result } from '../Result.js';
 import { err, ok } from '../Result.js';
 import type { IndexReconciliationService } from '../IndexReconciliationService.js';
-import { syncAndReconcileIndex } from '../syncAndReconcileIndex.js';
 
 export type RecapSessionInput = {
   readonly scope: Scope;
@@ -31,12 +29,11 @@ const DEFAULT_RECAP_COUNT = 5;
 export class RecapUseCase {
   constructor(
     private readonly sessionStore: SessionStore,
-    private readonly gitSync: GitSyncPort,
     private readonly indexReconciliation: IndexReconciliationService,
   ) {}
 
   async execute(input: RecapSessionInput): Promise<Result<RecapSessionOutput>> {
-    await syncAndReconcileIndex(this.gitSync, this.indexReconciliation);
+    await this.indexReconciliation.reconcileIfNeeded();
 
     var limit = input.last ?? DEFAULT_RECAP_COUNT;
     var sessions = await this.sessionStore.findRecent(input.scope, limit);

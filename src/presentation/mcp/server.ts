@@ -11,7 +11,6 @@ import {
   handleRestore,
   handleSave,
   handleStash,
-  handleSync,
   handleTrash,
   listSchema,
   loadSchema,
@@ -19,7 +18,6 @@ import {
   restoreInputSchema,
   saveSchema,
   stashSchema,
-  syncInputSchema,
   ROOTS_TOOL_HINT,
   type ScopeResolutionOptions,
 } from './tools/handlers.js';
@@ -154,15 +152,6 @@ async function main(): Promise<void> {
       var resolvedArgs = await withResolvedRoots(server, args);
       return mcpTextResult(handleList(container, resolvedArgs, 'mcp', scopeOptionsFromArgs(resolvedArgs)));
     },
-  );
-
-  server.registerTool(
-    'continuum_sync',
-    {
-      description: 'Enable or check git sync configuration',
-      inputSchema: syncInputSchema.shape,
-    },
-    async (args) => mcpTextResult(handleSync(container, args)),
   );
 
   server.registerTool(

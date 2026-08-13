@@ -1,4 +1,3 @@
-import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
@@ -14,14 +13,12 @@ export type RestoreInput = {
 
 export type RestoreOutput = {
   readonly message: string;
-  readonly syncWarning?: string;
 };
 
 export class RestoreUseCase {
   constructor(
     private readonly sessionStore: SessionStore,
     private readonly sessionIndex: SessionIndex,
-    private readonly gitSync: GitSyncPort,
   ) {}
 
   async execute(input: RestoreInput): Promise<Result<RestoreOutput>> {
@@ -42,7 +39,7 @@ export class RestoreUseCase {
         throw error;
       }
 
-      return ok(await this.finalizeRestore(`Restored ${restoredIds.length} session(s) from trash`));
+      return ok({ message: `Restored ${restoredIds.length} session(s) from trash` });
     }
 
     if (!input.sessionId) {
@@ -66,23 +63,6 @@ export class RestoreUseCase {
       throw error;
     }
 
-    return ok(await this.finalizeRestore('Restored successfully'));
-  }
-
-  private async finalizeRestore(message: string): Promise<RestoreOutput> {
-    var syncWarning: string | undefined;
-    var config = await this.gitSync.getConfiguration();
-    if (config.enabled) {
-      var syncResult = await this.gitSync.commitAndPush('continuum: restore');
-      if (!syncResult.success) {
-        syncWarning = syncResult.message;
-      }
-    }
-
-    var output: RestoreOutput = { message };
-    if (syncWarning !== undefined) {
-      output = { ...output, syncWarning };
-    }
-    return output;
+    return ok({ message: 'Restored successfully' });
   }
 }

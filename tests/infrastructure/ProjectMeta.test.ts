@@ -20,6 +20,13 @@ describe('ProjectMeta', () => {
     });
   });
 
+  it('parses a uuid-based folder name', () => {
+    expect(parseScopeDirName('my-app-a3f1c8e2-9b44-4d1a-8f0e-2c7b91d4e5aa')).toEqual({
+      hash: 'a3f1c8e2-9b44-4d1a-8f0e-2c7b91d4e5aa',
+      slug: 'my-app',
+    });
+  });
+
   it('treats missing slug and unknown placeholders as empty', () => {
     var parsed = parseProjectMeta('# project\n\n- Hash: abc\n- Created: 2026-08-12\n');
     expect(parsed.slug).toBe('');

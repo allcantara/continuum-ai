@@ -1,4 +1,3 @@
-import type { GitSyncPort } from '../../domain/ports/GitSyncPort.js';
 import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
 import type { Scope } from '../../domain/scope/Scope.js';
@@ -14,14 +13,12 @@ export type StashInput = {
 
 export type StashOutput = {
   readonly message: string;
-  readonly syncWarning?: string;
 };
 
 export class StashUseCase {
   constructor(
     private readonly sessionStore: SessionStore,
     private readonly sessionIndex: SessionIndex,
-    private readonly gitSync: GitSyncPort,
   ) {}
 
   async execute(input: StashInput): Promise<Result<StashOutput>> {
@@ -55,20 +52,7 @@ export class StashUseCase {
       return err('Either sessionId or stashProject must be provided');
     }
 
-    var syncWarning: string | undefined;
-    var config = await this.gitSync.getConfiguration();
-    if (config.enabled) {
-      var syncResult = await this.gitSync.commitAndPush('continuum: stash');
-      if (!syncResult.success) {
-        syncWarning = syncResult.message;
-      }
-    }
-
-    var output: StashOutput = { message: 'Moved to trash successfully' };
-    if (syncWarning !== undefined) {
-      output = { ...output, syncWarning };
-    }
-    return ok(output);
+    return ok({ message: 'Moved to trash successfully' });
   }
 
   private async compensateScopeStash(

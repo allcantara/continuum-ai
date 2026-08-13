@@ -73,32 +73,6 @@ Present results as a readable list with session id, scope, and summary.
 `,
   },
   {
-    fileName: 'continuum-sync-status.md',
-    content: `---
-description: Show Continuum git sync status
-${MANAGED_MARKER}
----
-
-Check git sync configuration using the MCP tool \`continuum_sync\` with \`action: "status"\`.
-
-Report whether sync is enabled and the configured remote URL.
-`,
-  },
-  {
-    fileName: 'continuum-sync-enable.md',
-    content: `---
-description: Enable Continuum git sync with a remote URL
-${MANAGED_MARKER}
----
-
-Enable git sync using the MCP tool \`continuum_sync\` with \`action: "enable"\`.
-
-- \`remote_url\` is required — use the URL from the user's message or ask for it before calling the tool.
-
-Confirm the result to the user.
-`,
-  },
-  {
     fileName: 'continuum-stash.md',
     content: `---
 description: Move a Continuum session or project to trash
