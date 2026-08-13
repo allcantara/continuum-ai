@@ -9,7 +9,7 @@ type SlashCommandTemplate = {
   readonly content: string;
 };
 
-const ROOTS_COMMAND_HINT = `Always pass \`roots\` with the absolute path of the current workspace (the project folder open in this chat). Cursor does not send this automatically. Omitting it reads/writes the shared "sem-projeto" bucket instead of this project.`;
+const ROOTS_COMMAND_HINT = `Always pass \`roots\` with the absolute path of the folder this chat is in (git project, random folder, or user home). Git is not required. Cursor does not send this automatically. Omit only when no folder path is known at all — then the shared "sem-projeto" bucket is used.`;
 
 const SLASH_COMMANDS: SlashCommandTemplate[] = [
   {
@@ -21,7 +21,7 @@ ${MANAGED_MARKER}
 
 Save the current work session using the MCP tool \`continuum_save\`.
 
-- \`roots\` (required when a folder is open): ${ROOTS_COMMAND_HINT}
+- \`roots\`: ${ROOTS_COMMAND_HINT}
 - \`content\`: full cumulative markdown snapshot (decisions, state, next steps)
 - \`summary\`: optional short summary (1–2 lines)
 
@@ -37,7 +37,7 @@ ${MANAGED_MARKER}
 
 Load the most recent session for the current scope using the MCP tool \`continuum_load\`.
 
-- \`roots\` (required when a folder is open): ${ROOTS_COMMAND_HINT}
+- \`roots\`: ${ROOTS_COMMAND_HINT}
 
 Present the loaded context clearly and note the session id if available.
 `,
@@ -51,7 +51,7 @@ ${MANAGED_MARKER}
 
 Load recent session history using the MCP tool \`continuum_recap\` (default \`last: 5\` unless the user specifies another number).
 
-- \`roots\` (required when a folder is open): ${ROOTS_COMMAND_HINT}
+- \`roots\`: ${ROOTS_COMMAND_HINT}
 
 Summarize what changed across sessions and highlight open items.
 `,
@@ -65,7 +65,7 @@ ${MANAGED_MARKER}
 
 List sessions using the MCP tool \`continuum_list\`.
 
-- \`roots\` (required when a folder is open): ${ROOTS_COMMAND_HINT}
+- \`roots\`: ${ROOTS_COMMAND_HINT}
 - Use \`query\` when the user wants to search by keyword.
 - Use \`all_projects: true\` only when the user explicitly asks to search across all projects. If the scoped list is empty, try \`all_projects: true\` before concluding there are no sessions.
 
@@ -81,7 +81,7 @@ ${MANAGED_MARKER}
 
 Move items to trash using the MCP tool \`continuum_stash\`.
 
-- \`roots\` (required when a folder is open): ${ROOTS_COMMAND_HINT}
+- \`roots\`: ${ROOTS_COMMAND_HINT}
 - \`session_id\`: stash one session (ask the user or use an id from prior \`continuum_list\` / \`continuum_trash\` output)
 - \`project: true\`: stash the entire current project/workspace (only when the user explicitly requests it)
 
@@ -109,7 +109,7 @@ ${MANAGED_MARKER}
 
 Restore a session using the MCP tool \`continuum_restore\`.
 
-- \`roots\` (required when a folder is open): ${ROOTS_COMMAND_HINT}
+- \`roots\`: ${ROOTS_COMMAND_HINT}
 - \`session_id\` is required — use the id from the user's message or from \`continuum_trash\` / \`continuum_list\` output.
 
 Confirm the restored session id to the user.

@@ -44,12 +44,12 @@ continuum --version # matches the installed npm package version
 
 ## Cursor: project scope (`roots`)
 
-In Cursor, MCP tools must receive the **absolute path of the open workspace** via the `roots` parameter. Cursor does not implement MCP `roots/list`, so Continuum cannot detect the open folder automatically.
+In Cursor, MCP tools must receive the **absolute path of the folder this chat is in** via the `roots` parameter — a git project, a random folder, or the user home directory. Git is not required. Cursor does not implement MCP `roots/list`, so Continuum cannot detect the folder automatically.
 
 | Situation | Where sessions are stored |
 |-----------|---------------------------|
-| `roots` passed (e.g. `/Users/you/dev/my-app`) | Under that project's folder, keyed by `.continuum.local.json` |
-| No `roots`, no prior scope in this MCP process | Shared **`sem-projeto`** bucket (all chats without a project) |
+| `roots` passed (e.g. `/Users/you/dev/my-app` or `/Users/you`) | Under that folder, keyed by `.continuum.local.json` |
+| No `roots`, no prior scope in this MCP process | Shared **`sem-projeto`** bucket (only when no folder path is known) |
 | No `roots`, but a previous call in the same chat already resolved scope | Reuses the last scope (with a warning) |
 
 The installed slash commands (`/continuum-save`, etc.) instruct the agent to pass `roots`. When calling MCP tools directly, always include:
@@ -164,7 +164,7 @@ In Cursor, use **Agent** chat. MCP tools do not run in Ask mode.
 | Natural language | Any MCP client — the agent maps your request to a tool |
 | Direct tool call | The agent invokes `continuum_save` (and the others) with arguments |
 
-In Cursor, pass `roots` with the absolute workspace path on every tool call. The installed slash commands already instruct the agent to do this. If `roots` is omitted, the session lands in the shared **`sem-projeto`** bucket instead of this project — see **Cursor: project scope**.
+In Cursor, pass `roots` with the absolute path of the folder this chat is in on every tool call (git project, random folder, or user home). The installed slash commands already instruct the agent to do this. If `roots` is omitted because no path is known, the session lands in the shared **`sem-projeto`** bucket — see **Cursor: project scope**.
 
 ### What a good snapshot contains
 
@@ -193,7 +193,7 @@ These work in any MCP client. In Cursor you can type the same ideas or use the m
 | Discard a test snapshot | "Stash the last Continuum session — it was only a test." |
 | Undo a stash | "What is in the Continuum trash?" then "Restore session `<id>`." |
 
-The agent should call the matching tool (`continuum_save`, `continuum_load`, ...) with `roots` set to the open workspace. Confirm the session id after a save, stash, or restore.
+The agent should call the matching tool (`continuum_save`, `continuum_load`, ...) with `roots` set to the folder this chat is in (including the user home). Confirm the session id after a save, stash, or restore.
 
 ## CLI usage
 
@@ -301,7 +301,7 @@ For a local checkout without global install:
 }
 ```
 
-Pass `roots` on every tool call when the client does not reliably expose the open workspace (see **Cursor: project scope**).
+Pass `roots` on every tool call when the client does not reliably expose the folder this chat is in (see **Cursor: project scope**).
 
 ## Storage
 

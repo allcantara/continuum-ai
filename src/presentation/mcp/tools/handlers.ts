@@ -59,8 +59,8 @@ export async function resolveScope(
 
 const UNSCOPED_WARNING = formatWarning(
   'nenhuma raiz de workspace foi informada (roots). Sessão salva no espaço genérico "sem-projeto", ' +
-  'compartilhado por todos os chats sem projeto aberto. Para vincular ao projeto certo, informe o caminho ' +
-  'absoluto do workspace no parâmetro roots.',
+  'compartilhado por todos os chats sem pasta conhecida. Para vincular à pasta certa (projeto git, pasta ' +
+  'aleatória ou pasta do usuário), informe o caminho absoluto no parâmetro roots.',
 );
 
 const CACHED_SCOPE_WARNING = formatWarning(
@@ -71,8 +71,9 @@ const EMPTY_NO_MARKER =
   'No Continuum project file (.continuum.local.json) in this folder. Save a session first to start tracking it.';
 
 const EMPTY_UNSCOPED =
-  'No sessions found in the shared "sem-projeto" bucket. Sessions for an open project are stored under ' +
-  'that project — pass roots with the workspace absolute path, or call again with all_projects: true.';
+  'No sessions found in the shared "sem-projeto" bucket. Sessions for a known folder (git project, random ' +
+  'folder, or user home) are stored under that folder — pass roots with that absolute path, or call again ' +
+  'with all_projects: true.';
 
 const TRUNCATION_WARNING = formatWarning(
   'conteúdo truncado para caber no contexto do modelo. O arquivo completo permanece salvo em disco.',
@@ -97,11 +98,12 @@ function withScopeWarnings(message: string, scope: Scope, options?: ScopeResolut
 }
 
 export const ROOTS_TOOL_HINT =
-  ' Always pass `roots` with the absolute path of the open workspace. Cursor does not implement MCP ' +
-  'roots/list; omitting roots uses the shared "sem-projeto" bucket instead of this project.';
+  ' Always pass `roots` with the absolute path of the folder this chat is in — a git project, a random ' +
+  'folder, or the user home directory. Git is not required. Cursor does not implement MCP roots/list. ' +
+  'Omit roots only when no folder path is known at all; that uses the shared "sem-projeto" bucket.';
 
 export const ROOTS_DESCRIPTION =
-  'Absolute workspace path(s). REQUIRED in Cursor (roots/list is broken). Omit only when no folder is open — then the shared sem-projeto bucket is used.';
+  'Absolute path of the folder this chat is in (git project, random folder, or user home). Git is not required. REQUIRED in Cursor (roots/list is broken). Omit only when no folder path is known at all — then the shared sem-projeto bucket is used.';
 
 type ParsedSessionId =
   | { readonly ok: true; readonly id: ReturnType<typeof sessionIdFrom> }

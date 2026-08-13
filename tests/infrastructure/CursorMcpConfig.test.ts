@@ -123,14 +123,23 @@ describe('installContinuumCursorCommands', () => {
     );
   });
 
-  it('instructs managed slash commands to pass roots with the workspace path', async () => {
+  it('instructs managed slash commands to pass roots for any known folder, including user home', async () => {
     await installContinuumCursorCommands();
     var commandsDir = join(tempHome, '.cursor', 'commands');
 
-    for (var fileName of ['continuum-save.md', 'continuum-load.md', 'continuum-recap.md', 'continuum-list.md']) {
+    for (var fileName of [
+      'continuum-save.md',
+      'continuum-load.md',
+      'continuum-recap.md',
+      'continuum-list.md',
+      'continuum-stash.md',
+      'continuum-restore.md',
+    ]) {
       var content = await readFile(join(commandsDir, fileName), 'utf-8');
       expect(content).toContain('roots');
       expect(content).toContain('sem-projeto');
+      expect(content).toContain('user home');
+      expect(content).not.toContain('required when a folder is open');
     }
   });
 });

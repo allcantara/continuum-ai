@@ -74,7 +74,7 @@ $CONTINUUM_HOME/                    (padrão: ~/.continuum/)
 - **Git**: quando a pasta é um repositório (ou está dentro de um), o arquivo é acrescentado a `.git/info/exclude` nesta cópia, para não aparecer no `git status` nem ser commitado.
 - **Leitura** (`list` / `load` / `recap` / `stash` / `restore`): sobe da pasta aberta até a raiz git procurando o arquivo. Sem git, não sobe para pastas pai. Se o arquivo não existir, não há projeto Continuum nesta pasta — o primeiro `save` cria o arquivo. `trash` lista a lixeira inteira desta máquina.
 - **Workspace** (multi-root): composição dos UUIDs de cada raiz que já tem o arquivo.
-- **Sem pasta aberta**: bucket fixo `sem-projeto` (hash `unscoped`), só no MCP sem `roots`.
+- **Sem caminho conhecido**: bucket fixo `sem-projeto` (hash `unscoped`), só no MCP sem `roots`. Home e pastas sem git são pastas válidas — o agente deve passar esse caminho em `roots`.
 
 #### 4.2.1 Limitação conhecida: a primitiva `roots` do MCP não é confiável em todo cliente
 
@@ -94,7 +94,7 @@ Por isso o design não pode assumir nem "roots sempre funciona" nem "cwd sempre 
 
 Três consequências no design, para não depender de nenhum desses mecanismos isoladamente:
 
-1. **O agente de IA que chama a ferramenta deve informar `roots` explicitamente** (usando o caminho absoluto do workspace que ele já conhece) em vez de confiar apenas na primitiva. As descrições dos parâmetros das ferramentas MCP orientam isso. Quando o agente informa `roots`, esse valor tem prioridade sobre qualquer resultado da primitiva.
+1. **O agente de IA que chama a ferramenta deve informar `roots` explicitamente** (usando o caminho absoluto que ele já conhece: pasta de projeto, pasta aleatória ou pasta do usuário) em vez de confiar apenas na primitiva. Só omite `roots` quando não há nenhum caminho conhecido; nesse caso o MCP usa o bucket `sem-projeto`. As descrições dos parâmetros das ferramentas MCP orientam isso. Quando o agente informa `roots`, esse valor tem prioridade sobre qualquer resultado da primitiva.
 2. **A primitiva `roots/list` ainda é tentada automaticamente** quando o agente não informa nada — funciona corretamente em clientes que a implementam de verdade (ex.: Claude Code), então continua sendo útil onde o Cursor falha.
 3. **O fallback para `process.cwd()` só é usado pela CLI**, nunca pelo servidor MCP. Na CLI, o diretório de trabalho do terminal é um sinal confiável (é o usuário quem o define, rodando o comando dentro do projeto). No servidor MCP, esse diretório varia por cliente (ver tabela acima) e não há como o Continuum diferenciar, em runtime, um cliente onde ele é confiável de um onde não é — por isso, sem `roots` (explícito ou via primitiva), uma chamada MCP cai no bucket `sem-projeto` em vez de arriscar adivinhar um caminho errado.
 4. **Cache de escopo por processo MCP**: quando uma chamada anterior na mesma sessão de chat já resolveu `roots` (explícito ou via primitiva), chamadas seguintes sem `roots` reutilizam o último escopo conhecido do processo — com aviso explícito. Isso reduz o impacto de o agente esquecer de informar `roots` na segunda chamada, sem substituir a necessidade de informá-lo na primeira.

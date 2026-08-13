@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Container } from '../../src/container.js';
 import { isUnscoped, projectScope, unscopedProjectScope } from '../../src/domain/scope/Scope.js';
 import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
-import { handleList, handleLoad, handleRecap, handleRestore, handleStash, resolveScope } from '../../src/presentation/mcp/tools/handlers.js';
+import { handleList, handleLoad, handleRecap, handleRestore, handleStash, resolveScope, ROOTS_DESCRIPTION, ROOTS_TOOL_HINT } from '../../src/presentation/mcp/tools/handlers.js';
 import { err, ok } from '../../src/application/Result.js';
 
 function containerWithScopeResolution(overrides: {
@@ -69,6 +69,16 @@ describe('resolveScope', () => {
     expect(resolveFromPath).not.toHaveBeenCalled();
     expect(resolveUnscoped).toHaveBeenCalled();
     expect(isUnscoped(scope)).toBe(true);
+  });
+});
+
+describe('roots parameter copy', () => {
+  it('tells the agent to pass a known folder including home, and to omit only when no path is known', () => {
+    expect(ROOTS_DESCRIPTION).toContain('user home');
+    expect(ROOTS_DESCRIPTION).toContain('sem-projeto');
+    expect(ROOTS_DESCRIPTION).not.toContain('Omit only when no folder is open');
+    expect(ROOTS_TOOL_HINT).toContain('user home directory');
+    expect(ROOTS_TOOL_HINT).toContain('sem-projeto');
   });
 });
 
