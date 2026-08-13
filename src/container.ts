@@ -2,11 +2,13 @@ import { mkdir } from 'node:fs/promises';
 import { IndexReconciliationService } from './application/IndexReconciliationService.js';
 import { GetSessionUseCase } from './application/load/GetSessionUseCase.js';
 import { LoadSessionUseCase } from './application/load/LoadSessionUseCase.js';
+import { ListIndexUseCase } from './application/list/ListIndexUseCase.js';
 import { ListScopesUseCase } from './application/list/ListScopesUseCase.js';
 import { ListSessionsUseCase } from './application/list/ListSessionsUseCase.js';
 import { RecapUseCase } from './application/recap/RecapUseCase.js';
 import { RestoreUseCase } from './application/restore/RestoreUseCase.js';
 import { SaveSessionUseCase } from './application/save/SaveSessionUseCase.js';
+import { ResolveScopeFromHashUseCase } from './application/scope/ResolveScopeFromHashUseCase.js';
 import { ScopeResolutionService } from './application/ScopeResolutionService.js';
 import { StashUseCase } from './application/stash/StashUseCase.js';
 import { ListTrashUseCase } from './application/trash/ListTrashUseCase.js';
@@ -28,8 +30,10 @@ export type Container = {
   readonly loadSession: LoadSessionUseCase;
   readonly getSession: GetSessionUseCase;
   readonly recap: RecapUseCase;
+  readonly resolveScopeFromHash: ResolveScopeFromHashUseCase;
   readonly listScopes: ListScopesUseCase;
   readonly listSessions: ListSessionsUseCase;
+  readonly listIndex: ListIndexUseCase;
   readonly stash: StashUseCase;
   readonly listTrash: ListTrashUseCase;
   readonly restore: RestoreUseCase;
@@ -45,6 +49,7 @@ export async function createContainer(home?: string): Promise<Container> {
   await indexReconciliation.reconcileIfNeeded();
 
   var scopeResolution = new ScopeResolutionService(new FileSystemProjectMarkerStore());
+  var resolveScopeFromHash = new ResolveScopeFromHashUseCase(sessionIndex, indexReconciliation);
 
   return {
     home: resolvedHome,
@@ -54,10 +59,12 @@ export async function createContainer(home?: string): Promise<Container> {
     scopeResolution,
     saveSession: new SaveSessionUseCase(sessionStore, sessionIndex),
     loadSession: new LoadSessionUseCase(sessionStore, indexReconciliation),
-    getSession: new GetSessionUseCase(sessionStore, sessionIndex, indexReconciliation),
+    getSession: new GetSessionUseCase(sessionStore, resolveScopeFromHash),
     recap: new RecapUseCase(sessionStore, indexReconciliation),
+    resolveScopeFromHash,
     listScopes: new ListScopesUseCase(sessionIndex, indexReconciliation),
     listSessions: new ListSessionsUseCase(sessionIndex, indexReconciliation),
+    listIndex: new ListIndexUseCase(sessionIndex, indexReconciliation),
     stash: new StashUseCase(sessionStore, sessionIndex),
     listTrash: new ListTrashUseCase(sessionIndex, indexReconciliation),
     restore: new RestoreUseCase(sessionStore, sessionIndex),

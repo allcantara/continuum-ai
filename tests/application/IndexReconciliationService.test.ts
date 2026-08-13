@@ -92,4 +92,27 @@ describe('IndexReconciliationService', () => {
 
     expect(sessionIndex.rebuildFromSessions).toHaveBeenCalledOnce();
   });
+
+  it('runs a single rebuild when reconcileIfNeeded is called concurrently', async () => {
+    var sessionStore = {
+      countAllSessions: vi.fn().mockResolvedValue(2),
+      listAllSessions: vi.fn().mockResolvedValue([{ id: 'a' }, { id: 'b' }]),
+    } as unknown as SessionStore;
+
+    var sessionIndex = {
+      count: vi.fn().mockResolvedValue(0),
+      listAllEntries: vi.fn().mockResolvedValue([]),
+      rebuildFromSessions: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, 30);
+          }),
+      ),
+    } as unknown as SessionIndex;
+
+    var service = new IndexReconciliationService(sessionStore, sessionIndex);
+    await Promise.all([service.reconcileIfNeeded(), service.reconcileIfNeeded()]);
+
+    expect(sessionIndex.rebuildFromSessions).toHaveBeenCalledOnce();
+  });
 });

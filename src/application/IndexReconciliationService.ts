@@ -2,12 +2,26 @@ import type { Session } from '../domain/session/Session.js';
 import type { SessionIndex, SessionIndexEntry, SessionStore } from '../domain/ports/SessionStore.js';
 
 export class IndexReconciliationService {
+  private inFlight: Promise<void> | null = null;
+
   constructor(
     private readonly sessionStore: SessionStore,
     private readonly sessionIndex: SessionIndex,
   ) {}
 
   async reconcileIfNeeded(): Promise<void> {
+    if (this.inFlight) {
+      await this.inFlight;
+      return;
+    }
+
+    this.inFlight = this.runReconcile().finally(() => {
+      this.inFlight = null;
+    });
+    await this.inFlight;
+  }
+
+  private async runReconcile(): Promise<void> {
     var fileCount = await this.sessionStore.countAllSessions();
     var indexCount = await this.sessionIndex.count();
     if (fileCount !== indexCount) {

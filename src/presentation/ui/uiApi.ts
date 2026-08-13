@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Container } from '../../container.js';
-import { resolveScopeFromHash } from '../../application/scope/resolveScopeFromHash.js';
+import type { FailureCode } from '../../application/Result.js';
 import { sessionIdFrom } from '../../domain/session/SessionId.js';
 import { readJsonBody, sendJson } from './httpJson.js';
 
@@ -57,7 +57,7 @@ export async function handleUiApi(
   }
 
   if (method === 'GET' && pathname === '/api/index') {
-    await sendIndex(container, res);
+    replyResult(res, await container.listIndex.execute());
     return;
   }
 
@@ -137,22 +137,6 @@ async function restore(container: Container, req: IncomingMessage, res: ServerRe
   replyResult(res, await container.restore.execute({ scope, sessionId: parsedId }));
 }
 
-async function sendIndex(container: Container, res: ServerResponse): Promise<void> {
-  await container.indexReconciliation.reconcileIfNeeded();
-  var entries = await container.sessionIndex.listAllEntries();
-  sendJson(res, 200, {
-    entries: entries.map((entry) => ({
-      id: entry.id,
-      scopeHash: entry.scopeHash,
-      scopeSlug: entry.scopeSlug,
-      scopeType: entry.scopeType,
-      summary: entry.summary,
-      createdAt: entry.createdAt.toISOString(),
-      status: entry.status,
-    })),
-  });
-}
-
 function isValidScopeHash(scopeHash: string, res: ServerResponse): boolean {
   if (!SCOPE_HASH_PATTERN.test(scopeHash) || scopeHash.includes('..')) {
     sendJson(res, 400, { error: 'Invalid project hash' });
@@ -165,7 +149,7 @@ async function requireScope(container: Container, scopeHash: string, res: Server
   if (!isValidScopeHash(scopeHash, res)) {
     return null;
   }
-  var scope = await resolveScopeFromHash(container.sessionIndex, scopeHash);
+  var scope = await container.resolveScopeFromHash.execute(scopeHash);
   if (!scope) {
     sendJson(res, 404, { error: `Project not found: ${scopeHash}` });
     return null;
@@ -188,10 +172,10 @@ function decodeParam(value: string): string {
 
 function replyResult<T>(
   res: ServerResponse,
-  result: { ok: true; value: T } | { ok: false; reason: string },
+  result: { ok: true; value: T } | { ok: false; reason: string; code?: FailureCode },
 ): void {
   if (!result.ok) {
-    var status = result.reason.includes('not found') || result.reason.includes('No session') ? 404 : 400;
+    var status = result.code === 'not_found' ? 404 : 400;
     sendJson(res, status, { error: result.reason });
     return;
   }

@@ -48,7 +48,7 @@ export class RestoreUseCase {
 
     var existing = await this.sessionStore.findById(input.scope, input.sessionId);
     if (!existing) {
-      return err(`Session not found in trash: ${input.sessionId}`);
+      return err(`Session not found in trash: ${input.sessionId}`, 'not_found');
     }
 
     if (existing.status !== 'trashed') {

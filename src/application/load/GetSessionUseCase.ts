@@ -1,10 +1,8 @@
-import type { SessionIndex } from '../../domain/ports/SessionStore.js';
 import type { SessionStore } from '../../domain/ports/SessionStore.js';
 import type { SessionId } from '../../domain/session/SessionId.js';
 import type { Result } from '../Result.js';
 import { err, ok } from '../Result.js';
-import type { IndexReconciliationService } from '../IndexReconciliationService.js';
-import { resolveScopeFromHash } from '../scope/resolveScopeFromHash.js';
+import type { ResolveScopeFromHashUseCase } from '../scope/ResolveScopeFromHashUseCase.js';
 
 export type GetSessionInput = {
   readonly scopeHash: string;
@@ -25,21 +23,18 @@ export type GetSessionOutput = {
 export class GetSessionUseCase {
   constructor(
     private readonly sessionStore: SessionStore,
-    private readonly sessionIndex: SessionIndex,
-    private readonly indexReconciliation: IndexReconciliationService,
+    private readonly resolveScopeFromHash: ResolveScopeFromHashUseCase,
   ) {}
 
   async execute(input: GetSessionInput): Promise<Result<GetSessionOutput>> {
-    await this.indexReconciliation.reconcileIfNeeded();
-
-    var scope = await resolveScopeFromHash(this.sessionIndex, input.scopeHash);
+    var scope = await this.resolveScopeFromHash.execute(input.scopeHash);
     if (!scope) {
-      return err(`Project not found: ${input.scopeHash}`);
+      return err(`Project not found: ${input.scopeHash}`, 'not_found');
     }
 
     var session = await this.sessionStore.findById(scope, input.sessionId);
     if (!session) {
-      return err(`Session not found: ${input.sessionId}`);
+      return err(`Session not found: ${input.sessionId}`, 'not_found');
     }
 
     return ok({

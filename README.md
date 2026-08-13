@@ -4,7 +4,7 @@ Persist and reuse work context across chats, projects, and tools.
 
 Continuum is a **local** MCP server and CLI. It saves cumulative session snapshots as markdown files on this machine, indexed by SQLite for fast search. It works with any MCP-compatible client (Cursor, Claude Code, etc.). Sessions stay under `~/.continuum/` — there is no git remote, no `sync` command, and no sharing across machines.
 
-> **Development status:** Continuum is in active development (v0.1.x). APIs, CLI commands, and Cursor integration may change between releases. Pin a version in production workflows and review [GitHub Releases](https://github.com/allcantara/continuum-ai/releases) before updating.
+> **Release:** Continuum 1.0.0. Review [GitHub Releases](https://github.com/allcantara/continuum-ai/releases) before updating.
 
 **npm:** [`continuum-ai`](https://www.npmjs.com/package/continuum-ai)
 
@@ -40,6 +40,7 @@ Verify the CLI:
 ```bash
 continuum --help    # use --help (two hyphens), not -help
 continuum --version # matches the installed npm package version
+continuum ui --open # optional: browse saved sessions in the browser
 ```
 
 ## Cursor: project scope (`roots`)
@@ -80,13 +81,14 @@ If the folder is a git repository, Continuum also appends `.continuum.local.json
 
 Without git, Continuum does **not** walk into parent folders. The marker stays in the folder you saved from.
 
-These tools look for that file starting from the open folder up to the git root:
+How each command uses that file:
 
 | Tool | Needs the file | Creates it |
 |------|----------------|------------|
 | `save` | No — creates it on first save | Yes |
 | `list`, `load`, `recap`, `stash`, `restore` | Yes | No |
-| `trash` | No — lists every trashed item on this machine | No |
+| `trash`, `ui` | No — see everything on this machine, not just this folder | No |
+| `setup` | No | No |
 
 If the file is missing, Continuum answers: *No Continuum project file (`.continuum.local.json`) in this folder. Save a session first to start tracking it.*
 
@@ -146,7 +148,7 @@ After global install or `continuum setup cursor`, type `/` in **Agent** chat:
 | `/continuum-trash` | `continuum_trash` | List trashed items |
 | `/continuum-restore` | `continuum_restore` | Restore session from trash |
 
-Slash commands are **Cursor-only** (v1). Other IDEs can use the MCP tools directly (see **Using Continuum via MCP**).
+Slash commands are **Cursor-only**. Other IDEs can use the MCP tools directly (see **Using Continuum via MCP**).
 
 ## Using Continuum via MCP
 
@@ -231,12 +233,12 @@ continuum stash --session 2026-08-11-0915
 continuum stash --project         # entire project/workspace
 continuum trash                   # all trashed items on this machine
 continuum restore 2026-08-11-0915
-continuum ui                      # local inspect UI at http://127.0.0.1:3847
+continuum restore --project
 ```
 
 ### Inspect in the browser
 
-`continuum ui` starts a local HTTP server on `127.0.0.1` (not the future remote MCP server). It prints the URL. Open it in a browser, then press Ctrl+C in the terminal to stop. Closing the tab does not stop the process. The page loads Bootstrap 5 from a CDN, so styling needs an internet connection.
+`continuum ui` starts a local HTTP server on `127.0.0.1` (not the future remote MCP server). It prints the URL. The default port is 3847; if that port is taken, Continuum tries the next few and prints the one it bound. `--port 0` lets the OS pick. Open the printed URL in a browser, then press Ctrl+C in the terminal to stop. Closing the tab does not stop the process. The page loads Bootstrap 5 from a CDN, so styling needs an internet connection.
 
 ```bash
 continuum ui

@@ -6,8 +6,8 @@ export async function resolveScopeFromHash(
   sessionIndex: SessionIndex,
   scopeHash: string,
 ): Promise<Scope | null> {
-  var entries = await sessionIndex.listAllEntries();
-  var match = entries.find((entry) => entry.scopeHash === scopeHash);
+  var active = await sessionIndex.search({ scopeHash, status: 'active' });
+  var match = active[0] ?? (await sessionIndex.search({ scopeHash, status: 'trashed' }))[0];
   if (!match) {
     return null;
   }

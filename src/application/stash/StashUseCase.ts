@@ -39,7 +39,7 @@ export class StashUseCase {
     } else if (input.sessionId) {
       var existing = await this.sessionStore.findById(input.scope, input.sessionId);
       if (!existing) {
-        return err(`Session not found: ${input.sessionId}`);
+        return err(`Session not found: ${input.sessionId}`, 'not_found');
       }
       await this.sessionStore.moveToTrash(input.scope, input.sessionId);
       try {

@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createContainer, type Container } from '../../src/container.js';
 import { projectScope } from '../../src/domain/scope/Scope.js';
 import { projectHashFromPath } from '../../src/domain/scope/ProjectHash.js';
+import { createSession } from '../../src/domain/session/Session.js';
+import { sessionContentFrom } from '../../src/domain/session/SessionContent.js';
+import { sessionIdFrom } from '../../src/domain/session/SessionId.js';
+import { sessionSummaryFrom } from '../../src/domain/session/SessionSummary.js';
 import { startUiServer, type StartedUiServer } from '../../src/presentation/ui/startUiServer.js';
 
 describe('Continuum UI server', () => {
@@ -87,6 +91,28 @@ describe('Continuum UI server', () => {
   it('rejects a project hash that is not a safe identifier', async () => {
     var response = await fetch(`${server.url}/api/projects/unscoped..etc/sessions`);
     expect(response.status).toBe(400);
+  });
+
+  it('lists sessions for a project that exists on disk but not yet in the index', async () => {
+    var orphan = projectScope(projectHashFromPath('/test/ui-orphan'), 'ui-orphan');
+    await container.sessionStore.save(
+      createSession({
+        id: sessionIdFrom('2026-08-11-0900'),
+        scope: orphan,
+        content: sessionContentFrom('Saved without updating the index.'),
+        summary: sessionSummaryFrom('Orphan session'),
+        createdAt: new Date('2026-08-11T09:00:00Z'),
+      }),
+    );
+
+    var sessions = await json(`${server.url}/api/projects/${orphan.hash}/sessions`);
+    expect(sessions.sessions).toEqual([expect.objectContaining({ sessionId: '2026-08-11-0900' })]);
+  });
+
+  it('returns 404 when the session id is unknown', async () => {
+    var response = await fetch(`${server.url}/api/projects/${scope.hash}/sessions/2026-01-01-0000`);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'Session not found: 2026-01-01-0000' });
   });
 });
 
