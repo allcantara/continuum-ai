@@ -61,6 +61,7 @@ $CONTINUUM_HOME/                    (padrão: ~/.continuum/)
 │   └── sessions/
 └── .trash/
     ├── projects/<hash>-<timestamp-exclusao>/...
+    ├── workspaces/<hash>-<timestamp-exclusao>/...
     └── sessions/<hash>/<timestamp>-<timestamp-exclusao>.md
 ```
 
@@ -69,6 +70,7 @@ $CONTINUUM_HOME/                    (padrão: ~/.continuum/)
 ### 4.2 Identidade (hash + slug)
 
 - **Projeto**: hash do remoto git normalizado (ignora diferença `ssh://` vs `https://`, sufixo `.git`), com fallback para o caminho absoluto se não houver remoto. O slug legível vem da mesma fonte (nome do repositório ou nome da pasta).
+- **Reuso de identidade no disco**: quando o remoto git não está disponível (ou muda temporariamente), o `ScopeResolutionService` consulta projetos já persistidos (`meta.md` + slug/caminho de origem) via `findByPathHint` antes de criar uma nova pasta. Isso mantém o mesmo hash entre sessões salvas com remoto e sessões salvas só com caminho — evitando duplicar pastas para o mesmo repositório local.
 - **Workspace** (multi-root): hash pela **composição** dos hashes dos projetos que o formam, obtidos via a primitiva `roots` do protocolo MCP (o cliente expõe quais pastas estão abertas) — **quando o cliente realmente implementa essa primitiva** (ver 4.2.1).
 - **Sem projeto/workspace aberto**: bucket fixo e estável, `sem-projeto` (hash constante `unscoped`), usado só pelo MCP quando não há `roots` nem outro caminho confiável — evita hashear um diretório de trabalho arbitrário que mudaria de chat para chat.
 
@@ -99,13 +101,16 @@ Três consequências no design, para não depender de nenhum desses mecanismos i
 
 Cada `continuum_save` deve gravar um **retrato completo do estado atual** (o que estava sendo feito, decisões, estado atual, próximos passos, arquivos relevantes) — não apenas o delta da sessão de chat corrente. Isso garante que ler somente a sessão mais recente (`continuum_load`) seja suficiente para retomar o trabalho, sem precisar reconstruir uma cadeia de deltas.
 
-O "estado atual" de um projeto/workspace **não é um arquivo físico separado** — é sempre a sessão com o timestamp mais recente dentro de `sessions/`.
+O "estado atual" de um projeto/workspace **não é um arquivo físico separado** — é sempre a sessão de id mais recente dentro de `sessions/`.
+
+A sessão "mais recente" é determinada pelo **id da sessão** (timestamp codificado no nome do arquivo, ex.: `2026-08-11-0915.md`), **não** pelo `mtime` do arquivo. Após `git checkout`, sync ou cópia entre máquinas, o horário de modificação do arquivo deixa de refletir a ordem cronológica real — ordenar por id evita que `continuum_load` retorne a sessão errada.
 
 ### 4.4 Índice derivado (SQLite)
 
 - Usa o módulo nativo **`node:sqlite`** (embutido no Node.js, sem dependência externa compilada) com **FTS5** para busca full-text.
 - Requer Node.js recente (idealmente ≥24.15/25.7/26 para FTS5 garantido via release candidate). Ao iniciar, o servidor testa se FTS5 está disponível; se não estiver, cai automaticamente para busca simples por texto nos arquivos (sem quebrar funcionalidade, só perde o ranking mais esperto).
-- **Nunca é fonte de verdade** — é reconstruível a qualquer momento varrendo os arquivos `.md` existentes. Se `index.sqlite` estiver vazio ou dessincronizado em relação aos arquivos em disco (ex.: após `git pull` trazer sessões de outra máquina), o `IndexReconciliationService` compara a contagem de arquivos com a contagem do índice e reconstrói automaticamente no boot, após `sync enable` e após cada `pull` bem-sucedido.
+- **Nunca é fonte de verdade** — é reconstruível a qualquer momento varrendo os arquivos `.md` existentes. Se `index.sqlite` estiver vazio ou dessincronizado em relação aos arquivos em disco (ex.: após `git pull` trazer sessões de outra máquina), o `IndexReconciliationService` compara a contagem de arquivos com a contagem do índice e reconstrói automaticamente no boot, após `sync enable` e após cada `pull` bem-sucedido. Arquivos que não são sessões (`meta.md`, entradas que não são diretórios em `projects/`) são excluídos dessa contagem.
+- Quando o índice existe mas faltam slugs legíveis (dados antigos), o serviço também reconstrói a partir do disco se encontrar slugs em `meta.md`.
 - Guarda metadados enxutos por sessão: hash do projeto/workspace, **slug legível**, timestamp, um resumo curto (1-2 linhas) extraído no momento do `save`, e um campo de **status** (`ativo` | `lixeira`) — usado tanto por `continuum_list` quanto por `continuum_trash`, sem precisar de dois caminhos de código diferentes.
 
 ### 4.5 Padrão de leitura (mantém as respostas enxutas)
@@ -118,7 +123,7 @@ O "estado atual" de um projeto/workspace **não é um arquivo físico separado**
 | Ferramenta | Função | Observações |
 |---|---|---|
 | `continuum_save` | Salva o contexto da sessão atual | Grava o `.md` (escrita atômica: temp + rename) e depois insere/atualiza a linha correspondente no índice. Emite aviso heurístico se o conteúdo parecer conter segredo (token/chave/senha). |
-| `continuum_load` | Carrega só a sessão mais recente | Lê o arquivo `.md` mais recente de `sessions/` do escopo atual (projeto ou workspace, resolvido automaticamente). Trunca na resposta se necessário. |
+| `continuum_load` | Carrega só a sessão mais recente | Lê o `.md` de id mais recente em `sessions/` do escopo atual (ordenado por id de sessão, não por mtime). Trunca na resposta se necessário. |
 | `continuum_recap` | Carrega as últimas N sessões (histórico mais profundo) | Padrão: **5 sessões**, configurável via parâmetro. Orçamento total de caracteres dividido entre as N sessões. |
 | `continuum_list` | Lista/busca sessões | Consulta o índice SQLite (FTS5 quando disponível, fallback por texto simples). Exibe slug legível do projeto quando disponível. |
 | `continuum_sync` | Liga/desliga/configura sincronização via git | Ver seção 6. Valida formato do remote URL. Emite aviso sobre visibilidade do remoto ao habilitar. |
@@ -161,9 +166,10 @@ continuum restore <id> | --project
 ## 8. Robustez de implementação
 
 1. **Escrita atômica**: grava em arquivo temporário e renomeia (operação atômica no sistema de arquivos) — protege contra corrupção mesmo com múltiplos processos `stdio` escrevendo ao mesmo tempo (cada cliente MCP pode spawnar seu próprio processo do servidor). Lock de arquivo simples para operações que tocam mais de um arquivo junto (ex.: sessão + índice).
-2. **Camada de resolução de escopo separada**: uma função única, chamada por todas as ferramentas antes de qualquer leitura/escrita, responsável por decidir projeto vs. workspace e calcular o hash correspondente. Centraliza a lógica e já deixa pronto o ponto de entrada para autenticação, quando/se existir modo remoto.
-3. **Respostas MCP com `isError`**: erros retornam `isError: true` no protocolo MCP (não apenas texto prefixado com `Error:`).
-4. **Avisos padronizados**: sync, segurança, truncamento, escopo genérico e cache de escopo usam prefixo `Aviso:` consistente, distinto de erros.
+2. **Varredura tolerante do filesystem**: ao listar projetos/workspaces em disco, só entradas que são diretórios são consideradas escopos — arquivos soltos (ex.: `.DS_Store` no macOS) são ignorados em vez de provocar erro ao abrir `<arquivo>/sessions`.
+3. **Camada de resolução de escopo separada**: uma função única, chamada por todas as ferramentas antes de qualquer leitura/escrita, responsável por decidir projeto vs. workspace e calcular o hash correspondente. Centraliza a lógica e já deixa pronto o ponto de entrada para autenticação, quando/se existir modo remoto.
+4. **Respostas MCP com `isError`**: erros retornam `isError: true` no protocolo MCP (não apenas texto prefixado com `Error:`).
+5. **Avisos padronizados**: sync, segurança, truncamento, escopo genérico e cache de escopo usam prefixo `Aviso:` consistente, distinto de erros.
 
 ## 9. Fora do escopo da v1 (roadmap)
 
