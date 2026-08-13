@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { GitRemoteReader as GitRemoteReaderPort, ProjectIdentity } from '../../domain/ports/GitRemoteReader.js';
@@ -10,6 +10,7 @@ import {
   projectSlugFromPath,
   projectSlugFromRemote,
 } from '../../domain/scope/ProjectHash.js';
+import { findGitRoot, resolveGitDir } from './GitRootResolver.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,8 +23,14 @@ export class GitRemoteReader implements GitRemoteReaderPort {
     return this.readOriginUrlFromGitConfig(absolutePath);
   }
 
+  async findRepositoryRoot(absolutePath: string): Promise<string | null> {
+    return findGitRoot(absolutePath);
+  }
+
   async resolveProjectIdentity(absolutePath: string): Promise<ProjectIdentity> {
-    var remote = await this.readRemoteUrl(absolutePath);
+    var gitRoot = await findGitRoot(absolutePath);
+    var resolvePath = gitRoot ?? absolutePath;
+    var remote = await this.readRemoteUrl(resolvePath);
     if (remote) {
       return {
         hash: projectHashFromRemote(remote),
@@ -33,9 +40,9 @@ export class GitRemoteReader implements GitRemoteReaderPort {
       };
     }
     return {
-      hash: projectHashFromPath(absolutePath),
-      slug: projectSlugFromPath(absolutePath),
-      sourceHint: absolutePath,
+      hash: projectHashFromPath(resolvePath),
+      slug: projectSlugFromPath(resolvePath),
+      sourceHint: resolvePath,
       fromRemote: false,
     };
   }
@@ -63,24 +70,6 @@ export class GitRemoteReader implements GitRemoteReaderPort {
     } catch {
       return null;
     }
-  }
-}
-
-async function resolveGitDir(absolutePath: string): Promise<string | null> {
-  var gitPath = join(absolutePath, '.git');
-  try {
-    var gitStat = await stat(gitPath);
-    if (gitStat.isDirectory()) {
-      return gitPath;
-    }
-    if (!gitStat.isFile()) {
-      return null;
-    }
-    var pointer = await readFile(gitPath, 'utf-8');
-    var match = /^gitdir:\s*(.+)$/m.exec(pointer);
-    return match?.[1]?.trim() || null;
-  } catch {
-    return null;
   }
 }
 

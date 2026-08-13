@@ -173,6 +173,9 @@ continuum restore <id> | --project
 
 ## 9. Fora do escopo da v1 (roadmap)
 
+> Planejamento detalhado da evolução (captura em camadas, transcripts, knowledge, hooks): **[DESIGN-v2.md](./DESIGN-v2.md)**.
+> Registro de escopos MCP/CLI (UUID + aliases): **[SCOPE-REGISTRY.md](./SCOPE-REGISTRY.md)**.
+
 - Camada `knowledge/` — conhecimento reaproveitável entre projetos, organizado por projeto de origem, com índice de descoberta cross-project.
 - Captura automática via hooks de ciclo de vida (hoje é só manual).
 - Modo remoto hospedado (HTTP) — arquitetura já preparada (núcleo desacoplado do transporte), implementação fica para depois.

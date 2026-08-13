@@ -10,4 +10,5 @@ export type ProjectIdentity = {
 export type GitRemoteReader = {
   readRemoteUrl(absolutePath: string): Promise<string | null>;
   resolveProjectIdentity(absolutePath: string): Promise<ProjectIdentity>;
+  findRepositoryRoot(absolutePath: string): Promise<string | null>;
 };

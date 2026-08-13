@@ -17,7 +17,9 @@ import { GitRemoteReader } from './infrastructure/git/GitRemoteReader.js';
 import { GitSyncAdapter } from './infrastructure/git/GitSyncAdapter.js';
 import { FileSystemSessionStore } from './infrastructure/persistence/filesystem/FileSystemSessionStore.js';
 import { PlainTextFallbackIndex } from './infrastructure/persistence/sqlite/PlainTextFallbackIndex.js';
+import { SqliteScopeRegistry } from './infrastructure/persistence/sqlite/SqliteScopeRegistry.js';
 import { SqliteSessionIndex } from './infrastructure/persistence/sqlite/SqliteSessionIndex.js';
+import { ScopeRegistryBootstrap } from './application/scope/ScopeRegistryBootstrap.js';
 
 export type Container = {
   readonly home: string;
@@ -47,7 +49,11 @@ export async function createContainer(home?: string): Promise<Container> {
 
   var gitRemoteReader = new GitRemoteReader();
   var gitSync = new GitSyncAdapter(resolvedHome);
-  var scopeResolution = new ScopeResolutionService(gitRemoteReader, sessionStore);
+  var scopeRegistry = new SqliteScopeRegistry(resolvedHome);
+  await scopeRegistry.initialize();
+  var scopeRegistryBootstrap = new ScopeRegistryBootstrap(scopeRegistry, sessionStore, gitRemoteReader);
+  await scopeRegistryBootstrap.bootstrapIfEmpty();
+  var scopeResolution = new ScopeResolutionService(gitRemoteReader, sessionStore, scopeRegistry);
 
   return {
     home: resolvedHome,
