@@ -231,6 +231,14 @@ describe('FileSystemSessionStore integration', () => {
     expect(count).toBe(2);
   });
 
+  it('ignores non-directory entries such as .DS_Store when scanning project folders', async () => {
+    await container.saveSession.execute({ scope, content: 'Real session.' });
+    await writeFile(join(home, 'projects', '.DS_Store'), 'bplist00', 'utf-8');
+
+    await expect(container.sessionStore.listAllSessions()).resolves.toHaveLength(1);
+    await expect(container.indexReconciliation.reconcileIfNeeded()).resolves.toBeUndefined();
+  });
+
   it('keeps every session file when many saves race concurrently in the same scope and minute', async () => {
     // Concurrent MCP tool calls (or a CLI save racing an MCP save) can land in the same
     // scope within the same minute. Picking a free id and writing it must be atomic —

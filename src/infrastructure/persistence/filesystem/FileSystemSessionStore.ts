@@ -193,7 +193,7 @@ export class FileSystemSessionStore implements SessionStore {
 
     var matches: string[];
     try {
-      var entries = await readdir(trashScopeBase);
+      var entries = await listSubdirectoryNames(trashScopeBase);
       matches = entries.filter((entry) => entry.startsWith(`${scope.hash}-`));
     } catch {
       throw new Error(`Scope not found in trash: ${scope.hash}`);
@@ -233,11 +233,7 @@ export class FileSystemSessionStore implements SessionStore {
     for (var scopeType of ['project', 'workspace'] as const) {
       var baseDir = scopeType === 'project' ? projectsDir(this.home) : workspacesDir(this.home);
 
-      try {
-        var dirNames = await readdir(baseDir);
-      } catch {
-        continue;
-      }
+      var dirNames = await listSubdirectoryNames(baseDir);
 
       for (var dirName of dirNames) {
         var scope = await this.scopeFromDir(scopeType, dirName);
@@ -270,7 +266,7 @@ export class FileSystemSessionStore implements SessionStore {
     var trashSessionsRoot = join(trashDir(this.home), 'sessions');
 
     try {
-      var scopeHashes = await readdir(trashSessionsRoot);
+      var scopeHashes = await listSubdirectoryNames(trashSessionsRoot);
       for (var scopeHash of scopeHashes) {
         var trashScopeDir = join(trashSessionsRoot, scopeHash);
         var scope = projectScope(scopeHash as ProjectHash);
@@ -286,7 +282,7 @@ export class FileSystemSessionStore implements SessionStore {
         : join(trashDir(this.home), 'workspaces');
 
       try {
-        var trashDirs = await readdir(trashScopeBase);
+        var trashDirs = await listSubdirectoryNames(trashScopeBase);
       } catch {
         continue;
       }
@@ -461,12 +457,7 @@ export class FileSystemSessionStore implements SessionStore {
   }
 
   private async readProjectIdentities(): Promise<readonly ProjectIdentity[]> {
-    var baseDir = projectsDir(this.home);
-    try {
-      var dirNames = await readdir(baseDir);
-    } catch {
-      return [];
-    }
+    var dirNames = await listSubdirectoryNames(projectsDir(this.home));
 
     var identities: ProjectIdentity[] = [];
     for (var dirName of dirNames) {
@@ -530,6 +521,15 @@ async function pathExists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function listSubdirectoryNames(baseDir: string): Promise<readonly string[]> {
+  try {
+    var entries = await readdir(baseDir, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return [];
   }
 }
 
