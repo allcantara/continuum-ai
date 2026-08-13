@@ -1,6 +1,8 @@
 import { mkdir } from 'node:fs/promises';
 import { IndexReconciliationService } from './application/IndexReconciliationService.js';
+import { GetSessionUseCase } from './application/load/GetSessionUseCase.js';
 import { LoadSessionUseCase } from './application/load/LoadSessionUseCase.js';
+import { ListScopesUseCase } from './application/list/ListScopesUseCase.js';
 import { ListSessionsUseCase } from './application/list/ListSessionsUseCase.js';
 import { RecapUseCase } from './application/recap/RecapUseCase.js';
 import { RestoreUseCase } from './application/restore/RestoreUseCase.js';
@@ -24,7 +26,9 @@ export type Container = {
   readonly scopeResolution: ScopeResolutionService;
   readonly saveSession: SaveSessionUseCase;
   readonly loadSession: LoadSessionUseCase;
+  readonly getSession: GetSessionUseCase;
   readonly recap: RecapUseCase;
+  readonly listScopes: ListScopesUseCase;
   readonly listSessions: ListSessionsUseCase;
   readonly stash: StashUseCase;
   readonly listTrash: ListTrashUseCase;
@@ -50,7 +54,9 @@ export async function createContainer(home?: string): Promise<Container> {
     scopeResolution,
     saveSession: new SaveSessionUseCase(sessionStore, sessionIndex),
     loadSession: new LoadSessionUseCase(sessionStore, indexReconciliation),
+    getSession: new GetSessionUseCase(sessionStore, sessionIndex, indexReconciliation),
     recap: new RecapUseCase(sessionStore, indexReconciliation),
+    listScopes: new ListScopesUseCase(sessionIndex, indexReconciliation),
     listSessions: new ListSessionsUseCase(sessionIndex, indexReconciliation),
     stash: new StashUseCase(sessionStore, sessionIndex),
     listTrash: new ListTrashUseCase(sessionIndex, indexReconciliation),

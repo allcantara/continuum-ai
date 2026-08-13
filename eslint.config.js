@@ -5,7 +5,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/presentation/ui/public/**'],
   },
   {
     files: ['src/**/*.ts', 'tests/**/*.ts'],

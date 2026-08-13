@@ -376,12 +376,29 @@ continuum sync enable --include-transcripts   # exige confirmação interativa
 
 Mantidos no roadmap de longo prazo (ver DESIGN.md seção 9):
 
-- Modo remoto HTTP (`continuum serve --http`) — núcleo já desacoplado; implementação posterior.
-- UI web navegável.
+- Modo remoto HTTP (`continuum serve --http`) — núcleo já desacoplado; implementação posterior. Distinto de `continuum ui` (inspeção local já na v1).
 - Embeddings / busca semântica.
 - Backups binários dedicados.
 - Expiração automática da lixeira (agendador SO).
 - Migração do núcleo para Rust (ai-memory).
+
+A inspeção local (`continuum ui`) já existe na v1: projetos → sessões → `.md` somente leitura, stash/lixeira/restore, índice SQLite como vitrine.
+
+## 11.1 UI — edição de sessão (decidir antes de implementar)
+
+A v1 **não** edita o arquivo `.md`. Cada `save` da CLI/MCP continua criando um arquivo novo. Na v2 da UI, escolher **uma** destas opções:
+
+| Opção | Efeito |
+|---|---|
+| Sobrescrever aquele arquivo | Correção pontual; o id permanece; o índice é atualizado |
+| Sempre criar sessão nova | Preserva o histórico; a lista cresce a cada edição |
+| Os dois | “Salvar” sobrescreve; “Salvar como nova” cria outro arquivo |
+
+Regras que qualquer opção deve respeitar:
+
+- Markdown continua sendo a fonte da verdade; o SQLite só é atualizado depois do arquivo (via `upsert` / reconcile). Não editar linhas do índice direto.
+- O `save` da CLI e do MCP não muda: continua imutável (arquivo novo).
+- Sem exclusão permanente nesta fatia — stash/lixeira já cobrem a UI.
 
 ## 12. Decisões em aberto (resolver antes de Fase 1)
 
@@ -392,6 +409,7 @@ Mantidos no roadmap de longo prazo (ver DESIGN.md seção 9):
 | 3 | Cliente prioritário | Cursor-only vs. multi-cliente | Cursor-first; adapter pattern |
 | 4 | Distill automático | Job local vs. agente no save | Job local (`maintain`); agente opcional em `distill` |
 | 5 | ID de conversa | UUID vs. timestamp+hash | UUID do cliente quando disponível; fallback timestamp-scope |
+| 6 | Edição de sessão na UI | Sobrescrever / nova / os dois | Em aberto — ver seção 11.1 |
 
 ## 13. Compatibilidade com v1
 

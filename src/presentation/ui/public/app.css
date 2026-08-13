@@ -1,0 +1,122 @@
+:root {
+  color-scheme: dark;
+  --bg: #12141a;
+  --panel: #1b1f2a;
+  --line: #2c3344;
+  --text: #e8ecf4;
+  --muted: #9aa3b5;
+  --accent: #7eb6ff;
+  --danger: #f07178;
+  --ok: #9ece6a;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.top {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.brand {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+nav a:hover { color: var(--accent); }
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem 1.2rem 3rem;
+}
+
+h1 { font-size: 1.4rem; margin: 0 0 0.4rem; }
+.crumb, .muted, .note { color: var(--muted); }
+.note { font-size: 0.9rem; margin-top: 1.2rem; }
+
+.list { list-style: none; padding: 0; margin: 1rem 0; }
+
+.list li, .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 0.6rem 0;
+}
+
+.list a, .card {
+  display: block;
+  padding: 0.9rem 1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.list a:hover { border-color: var(--accent); }
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0; }
+
+button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+button.danger { border-color: var(--danger); color: var(--danger); }
+button:hover { border-color: var(--accent); }
+
+pre {
+  white-space: pre-wrap;
+  background: #0d0f14;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.error { color: var(--danger); }
+.ok { color: var(--ok); }

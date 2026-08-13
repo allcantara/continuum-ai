@@ -1,6 +1,6 @@
 {
   "name": "continuum-ai",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Persist and reuse work context across chats, projects, and tools via MCP and CLI",
   "author": "Bruno Vinicius Souza Alcantara",
   "type": "module",
@@ -21,7 +21,7 @@
     "scripts"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-ui-public.mjs",
     "dev": "tsx src/presentation/mcp/server.ts",
     "start": "node dist/presentation/mcp/server.js",
     "cli": "tsx src/presentation/cli/cli.ts",

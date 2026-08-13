@@ -15,6 +15,8 @@ import {
   handleStash,
   handleTrash,
 } from '../mcp/tools/handlers.js';
+import { openInBrowser } from '../ui/openInBrowser.js';
+import { startUiServer } from '../ui/startUiServer.js';
 
 function openEditor(): string {
   var editor = process.env.EDITOR ?? process.env.VISUAL ?? 'nano';
@@ -121,6 +123,27 @@ async function main(): Promise<void> {
     });
 
   program
+    .command('ui')
+    .description('Open a local browser UI to inspect saved sessions')
+    .option('-p, --port <number>', 'Port (0 lets the OS pick)', '3847')
+    .option('--open', 'Open the page in the default browser')
+    .action(async (options: { port: string; open?: boolean }) => {
+      var port = Number(options.port);
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        console.error('Error: port must be an integer between 0 and 65535');
+        process.exit(1);
+      }
+      var server = await startUiServer(container, { port });
+      console.log(`Continuum UI: ${server.url}`);
+      console.log('Press Ctrl+C to stop.');
+      if (options.open === true) {
+        openInBrowser(server.url);
+      }
+      await waitForInterrupt();
+      await server.close();
+    });
+
+  program
     .command('restore')
     .description('Restore session or project from trash')
     .argument('[id]', 'Session ID to restore')
@@ -173,6 +196,18 @@ async function main(): Promise<void> {
     });
 
   await program.parseAsync(process.argv);
+}
+
+function waitForInterrupt(): Promise<void> {
+  return new Promise((resolve) => {
+    var stop = () => {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+      resolve();
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
 }
 
 main().catch((error) => {

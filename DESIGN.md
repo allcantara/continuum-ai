@@ -21,15 +21,15 @@ Tudo fica nesta máquina, em `~/.continuum/`. Não há sincronização entre com
 
 - Servidor MCP local em **Node.js/TypeScript**.
 - Transporte `stdio` na v1. Núcleo (identidade, storage, índice) **desacoplado do transporte**, para permitir evoluir para modo remoto/HTTP hospedado no futuro sem reescrever a lógica.
-- **CLI própria**, reaproveitando o mesmo núcleo (casca fina de parsing de argumentos por cima das mesmas funções que o servidor MCP chama). Incluída já na v1.
+- **CLI própria**, reaproveitando o mesmo núcleo (casca fina de parsing de argumentos por cima das mesmas funções que o servidor MCP chama). Incluída já na v1. O comando `continuum ui` sobe um HTTP local só de inspeção (`127.0.0.1`) — não é o MCP remoto do roadmap.
 - Sem Agent Skill separada — as descrições das próprias ferramentas MCP orientam o agente sobre quando/como usá-las. Acionamento sempre manual (pedido explícito em linguagem natural ou comando de CLI), sem captura automática via hooks na v1.
 
 ### 3.1 Como o uso funciona na prática
 
-**Na v1 (stdio) não existe servidor escutando em `localhost:porta`.** Não há processo contínuo para "apontar":
+**Na v1 (stdio) o MCP não escuta em `localhost:porta`.** Não há processo contínuo para "apontar" o cliente MCP:
 
 - **Via MCP**: o cliente (Cursor, Claude Code) é configurado com um **comando** a executar (ex.: `node /caminho/continuum/dist/server.js`), não uma URL. O próprio cliente sobe esse processo quando precisa e conversa com ele por `stdin`/`stdout` (pipes diretos entre processos, sem rede). Ao fechar o chat/IDE, o processo termina.
-- **Via CLI**: o comando `continuum` executa a lógica diretamente (lê/escreve arquivos e o SQLite no processo do próprio comando) e termina — não conversa com nenhum servidor.
+- **Via CLI**: o comando `continuum` executa a lógica diretamente (lê/escreve arquivos e o SQLite no processo do próprio comando) e termina — não conversa com nenhum servidor. **Exceção:** `continuum ui` deixa um processo HTTP em `127.0.0.1` até Ctrl+C, só para o browser local inspecionar os dados.
 - **Uma máquina**: sessões e o arquivo `.continuum.local.json` existem só neste computador. Não há remoto nem comando de sync.
 
 **No modo remoto (roadmap, seção 9)**, a lógica muda para o modelo que normalmente se espera de um "servidor":
@@ -142,7 +142,16 @@ continuum list [--query "busca"] [--all-projects]
 continuum stash --session <id> | --project
 continuum trash
 continuum restore <id> | --project
+continuum ui [--port N] [--open]    # inspeção local no browser; Ctrl+C encerra
 ```
+
+### 5.2 UI local de inspeção (`continuum ui`)
+
+Servidor HTTP em `127.0.0.1` (nunca em todas as interfaces). Imprime o link no terminal. Fechar a aba não encerra o processo; Ctrl+C sim.
+
+Navegação: projetos → sessões → conteúdo completo do `.md` (sem truncar). Stash, lixeira e restore usam os mesmos casos de uso da CLI/MCP. O índice SQLite aparece só como vitrine — o markdown continua sendo a fonte da verdade.
+
+A tela da sessão é **somente leitura** na v1. Edição (sobrescrever o arquivo, criar outra sessão, ou os dois) fica para a v2 — ver [DESIGN-v2.md](./DESIGN-v2.md) seção "UI — edição de sessão".
 
 ## 6. Local apenas
 
@@ -173,13 +182,14 @@ Não há sincronização git de `~/.continuum/`. O arquivo `.continuum.local.jso
 
 - Camada `knowledge/` — conhecimento reaproveitável entre projetos, organizado por projeto de origem, com índice de descoberta cross-project.
 - Captura automática via hooks de ciclo de vida (hoje é só manual).
-- Modo remoto hospedado (HTTP) — arquitetura já preparada (núcleo desacoplado do transporte), implementação fica para depois.
+- Modo remoto hospedado (HTTP / MCP) — arquitetura já preparada (núcleo desacoplado do transporte); `continuum ui` **não** é esse modo.
 - Expiração automática da lixeira (agendador do SO ou varredura preguiçosa).
-- Backups binários dedicados, UI web navegável, jobs agendados de manutenção (consolidação, lint, embeddings).
+- Backups binários dedicados, jobs agendados de manutenção (consolidação, lint, embeddings).
+- Edição de sessão na UI (sobrescrever / nova / os dois) — ver DESIGN-v2.md.
 
 ## 10. Referência de comparação
 
-Este design foi comparado com um projeto de referência mais robusto ("ai-memory", em Rust) que usa: hooks de captura automática, servidor único em Rust servindo stdio e HTTP, fila de escrita única (mpsc), camada dedicada de scope/auth/admission, SQLite como índice derivado de uma wiki markdown, jobs agendados de manutenção, e backups dedicados. As ideias de **índice derivado**, **escrita segura contra concorrência** e **camada de resolução de escopo separada** foram incorporadas ao design do Continuum; as demais (hooks automáticos, UI web, jobs agendados, binário Rust) ficaram como possíveis evoluções futuras, para manter a v1 o mais simples possível.
+Este design foi comparado com um projeto de referência mais robusto ("ai-memory", em Rust) que usa: hooks de captura automática, servidor único em Rust servindo stdio e HTTP, fila de escrita única (mpsc), camada dedicada de scope/auth/admission, SQLite como índice derivado de uma wiki markdown, jobs agendados de manutenção, e backups dedicados. As ideias de **índice derivado**, **escrita segura contra concorrência** e **camada de resolução de escopo separada** foram incorporadas ao design do Continuum; as demais (hooks automáticos, MCP HTTP remoto, jobs agendados, binário Rust) ficaram como possíveis evoluções futuras, para manter a v1 o mais simples possível. A inspeção local no browser (`continuum ui`) entrou na v1; edição de sessão na UI permanece na v2.
 
 ## 11. Casos de uso ilustrativos
 
@@ -192,3 +202,4 @@ Este design foi comparado com um projeto de referência mais robusto ("ai-memory
 | `stash` | Sessão de teste salva por engano | "apaga essa última sessão, foi só um teste" | `continuum stash --session <id>` |
 | `trash` | Antes de restaurar algo | "o que eu já apaguei desse projeto?" | `continuum trash` |
 | `restore` | Recuperando de uma exclusão por engano | "restaura aquela sessão que apaguei ontem" | `continuum restore <id>` |
+| `ui` | Inspecionar sessões no browser | — | `continuum ui` |

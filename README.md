@@ -231,7 +231,20 @@ continuum stash --session 2026-08-11-0915
 continuum stash --project         # entire project/workspace
 continuum trash                   # all trashed items on this machine
 continuum restore 2026-08-11-0915
+continuum ui                      # local inspect UI at http://127.0.0.1:3847
 ```
+
+### Inspect in the browser
+
+`continuum ui` starts a local HTTP server on `127.0.0.1` (not the future remote MCP server). It prints the URL. Open it in a browser, then press Ctrl+C in the terminal to stop. Closing the tab does not stop the process.
+
+```bash
+continuum ui
+continuum ui --port 4000
+continuum ui --open               # also open the default browser
+```
+
+The UI lists projects, sessions, and the full `.md` snapshot (read-only). You can stash a session or project, browse trash, restore, and inspect the derived SQLite index. Editing a session file is not available yet (planned for v2).
 
 ### Command reference
 
@@ -249,6 +262,7 @@ continuum stash --session <id> | --project
 continuum trash
 continuum restore <id>
 continuum restore --project
+continuum ui [--port N] [--open]
 continuum setup cursor [--no-commands]
 ```
 
@@ -264,6 +278,7 @@ MCP and CLI are interchangeable for the same job. Prefer MCP when you want the a
 | "Did we already solve this elsewhere?" | "Search Continuum across all projects for ..." | `continuum list --all-projects -q "..."` |
 | Accidental test snapshot | "Stash that last session." | `continuum stash --session <id>` |
 | Undo a stash | "List Continuum trash, then restore `<id>`." | `continuum trash` then `continuum restore <id>` |
+| Browse saved sessions | — | `continuum ui` |
 
 A typical loop:
 
