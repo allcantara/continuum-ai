@@ -33,6 +33,8 @@ Then in Cursor:
 2. **Settings → MCP → Reload** on the `continuum` server
 3. Type `/continuum-save` (or any `/continuum-*` command) to use Continuum
 
+Natural-language prompts, terminal examples, and use cases: **Using Continuum via MCP**, **CLI usage**, and **Use cases**.
+
 Verify the CLI:
 
 ```bash
@@ -110,9 +112,96 @@ After global install or `continuum setup cursor`, type `/` in **Agent** chat:
 | `/continuum-trash` | `continuum_trash` | List trashed items |
 | `/continuum-restore` | `continuum_restore` | Restore session from trash |
 
-Slash commands are **Cursor-only** (v1). Other IDEs can use the MCP tools directly.
+Slash commands are **Cursor-only** (v1). Other IDEs can use the MCP tools directly (see **Using Continuum via MCP**).
+
+## Using Continuum via MCP
+
+The MCP server is not a long-running HTTP process and has no URL to configure. The client (Cursor, Claude Code, or any MCP-compatible IDE) starts `continuum-mcp` over stdio and talks to it through stdin/stdout.
+
+MCP and CLI share the same files under `~/.continuum/`. You can save in chat and inspect the snapshot later with `continuum load` in the terminal (or the other way around).
+
+In Cursor, use **Agent** chat. MCP tools do not run in Ask mode.
+
+### Three ways to call it
+
+| How | When to use it |
+|-----|----------------|
+| Slash command (`/continuum-save`, ...) | Cursor, after global install or `continuum setup cursor` |
+| Natural language | Any MCP client — the agent maps your request to a tool |
+| Direct tool call | The agent invokes `continuum_save` (and the others) with arguments |
+
+In Cursor, pass `roots` with the absolute workspace path on every tool call. The installed slash commands already instruct the agent to do this. If `roots` is omitted, the session lands in the shared **`sem-projeto`** bucket instead of this project — see **Cursor: project scope**.
+
+### What a good snapshot contains
+
+Each `continuum_save` writes a **full picture** of the current work, not a delta of the last few messages. That is why `continuum_load` is enough to resume in a new chat: you do not need to replay older sessions unless you want history (`continuum_recap`).
+
+Include:
+
+- What you were doing and why
+- Decisions already made (and the reason, when it is not obvious)
+- Current state (done vs blocked)
+- Next steps
+- Relevant files or areas — not the full source
+
+Do not put secrets (tokens, passwords, keys). Continuum warns on likely secrets but still writes the file.
+
+### Example prompts
+
+These work in any MCP client. In Cursor you can type the same ideas or use the matching `/continuum-*` command.
+
+| You want to... | Say something like |
+|----------------|--------------------|
+| Close the day without losing context | "Save this session in Continuum before I close." |
+| Start a new chat on the same project | "Load the last Continuum session for this project and continue from there." |
+| Return to a project that sat idle | "Give me a recap of the last 10 Continuum sessions here." |
+| Reuse a decision from another repo | "Search Continuum across all projects for SIAPE authentication." |
+| Sync to another machine | "Enable Continuum git sync with `git@github.com:me/continuum-memory.git`." |
+| Discard a test snapshot | "Stash the last Continuum session — it was only a test." |
+| Undo a stash | "What is in the Continuum trash?" then "Restore session `<id>`." |
+
+The agent should call the matching tool (`continuum_save`, `continuum_load`, ...) with `roots` set to the open workspace. Confirm the session id after a save, stash, or restore.
 
 ## CLI usage
+
+The CLI talks to the same store as MCP. It does **not** need `roots`: it uses the terminal's current directory, which you control. Always `cd` into the project (or any folder you want to scope to) first.
+
+```bash
+cd ~/dev/my-app
+continuum --help
+```
+
+### Save and resume
+
+`continuum save` always opens `$EDITOR` (or `$VISUAL`, then `nano`) for the snapshot body. `-m` is only the short summary stored in the search index — not a substitute for the body.
+
+```bash
+continuum save -m "Chose JWT; next is refresh tokens"
+continuum load                    # print the latest snapshot for this directory
+continuum recap --last 10         # last 10 sessions (default: 5)
+```
+
+### Search
+
+```bash
+continuum list                    # sessions for the current project
+continuum list -q "authentication"
+continuum list --all-projects -q "SIAPE"
+```
+
+### Sync, stash, restore
+
+```bash
+continuum sync enable git@github.com:me/continuum-memory.git
+continuum sync status
+
+continuum stash --session 2026-08-11-0915
+continuum stash --project         # entire project/workspace
+continuum trash
+continuum restore 2026-08-11-0915
+```
+
+### Command reference
 
 ```bash
 continuum --help                # global help
@@ -120,19 +209,42 @@ continuum -h                    # short form
 continuum help <command>        # help for a subcommand
 continuum <command> --help      # same, per subcommand
 
-continuum save [-m "summary"]     # save current session context
+continuum save [-m "summary"]     # save current session context (opens editor)
 continuum load                    # load latest session
 continuum recap [--last N]        # load last N sessions (default: 5)
-continuum list [--query "search"] [--all-projects]
+continuum list [-q "search"] [--all-projects]
 continuum sync enable <remote-url>
 continuum sync status
 continuum stash --session <id> | --project
 continuum trash
 continuum restore <id>
+continuum restore --project
 continuum setup cursor [--no-commands]
 ```
 
-Run CLI commands from inside the project directory (or any directory you want to scope to).
+## Use cases
+
+MCP and CLI are interchangeable for the same job. Prefer MCP when you want the agent to write or apply the snapshot inside the chat. Prefer the CLI when you want to inspect, search, or edit without opening a conversation.
+
+| Situation | MCP | CLI |
+|-----------|-----|-----|
+| End of the day | "Save this session in Continuum." | `continuum save -m "..."` |
+| New chat, same project | "Load the last session and continue." | `continuum load` |
+| Project idle for months | "Recap the last 10 sessions." | `continuum recap --last 10` |
+| "Did we already solve this elsewhere?" | "Search Continuum across all projects for ..." | `continuum list --all-projects -q "..."` |
+| Second laptop | "Enable Continuum git sync with `<remote>`." | `continuum sync enable <remote>` |
+| Accidental test snapshot | "Stash that last session." | `continuum stash --session <id>` |
+| Undo a stash | "List Continuum trash, then restore `<id>`." | `continuum trash` then `continuum restore <id>` |
+
+A typical loop:
+
+1. Open a new chat (or a new terminal) in the project.
+2. Load (`continuum_load` / `continuum load`) — or recap if you need more than the latest snapshot.
+3. Do the work.
+4. Save a full snapshot before you close the chat, switch tasks, or switch machines.
+5. If git sync is enabled, save still writes locally first; push is best-effort and will not fail the save.
+
+Sessions are markdown files under `~/.continuum/projects/.../sessions/`. You can open them in any editor.
 
 ## MCP configuration (other clients)
 
@@ -202,7 +314,7 @@ The latest session for `continuum load` is chosen by **session id** (timestamp i
 
 ## Tools (MCP)
 
-All scope-aware tools accept optional `roots: string[]` (absolute workspace paths). See **Cursor: project scope**.
+All scope-aware tools accept optional `roots: string[]` (absolute workspace paths). See **Cursor: project scope** and **Using Continuum via MCP**.
 
 | Tool | Description |
 |------|-------------|
