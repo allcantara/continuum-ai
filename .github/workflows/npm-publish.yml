@@ -26,31 +26,34 @@ jobs:
   publish:
     name: Publish continuum-ai
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.6.2
 
       - name: Verify OIDC publish prerequisites
         run: |
           echo "node: $(node --version)"
           echo "npm: $(npm --version)"
-          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NODE_AUTH_TOKEN is set — unset it for trusted publishing."
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "ACTIONS_ID_TOKEN_REQUEST_URL is missing. The job needs permissions.id-token: write."
             exit 1
           fi
-          if [ -f .npmrc ] && grep -q '_authToken' .npmrc; then
-            echo ".npmrc contains _authToken — this blocks OIDC trusted publishing."
-            cat .npmrc
-            exit 1
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          if [ -f "$npmrc" ]; then
+            sed -i '/_authToken/d' "$npmrc"
           fi
 
       - name: Install dependencies
@@ -87,4 +90,6 @@ jobs:
 
       - name: Publish to npm via trusted publishing (OIDC)
         if: steps.npm-version.outputs.publish == 'true'
-        run: npm publish --access public --ignore-scripts
+        run: |
+          unset NODE_AUTH_TOKEN
+          npm publish --access public --provenance --ignore-scripts

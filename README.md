@@ -227,6 +227,14 @@ continuum setup cursor   # test Cursor integration locally
 
 Releases are published to npm automatically via GitHub Actions when `package.json` version changes on `master` (Trusted Publishing / OIDC — no long-lived npm token in the repo).
 
+Configure the trusted publisher once at [continuum-ai package access](https://www.npmjs.com/package/continuum-ai/access):
+
+- Organization or user: `allcantara`
+- Repository: `continuum-ai`
+- Workflow filename: `npm-publish.yml` (filename only, including `.yml`)
+- Environment name: leave empty
+- Allowed actions: `npm publish`
+
 ## License
 
 MIT
